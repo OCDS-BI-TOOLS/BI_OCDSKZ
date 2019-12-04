@@ -1,0 +1,489 @@
+////Main 
+
+
+
+SET ThousandSep=' ';
+SET DecimalSep=',';
+SET MoneyThousandSep=' ';
+SET MoneyDecimalSep=',';
+SET MoneyFormat='# ##0,00 ₴;-# ##0,00 ₴';
+SET TimeFormat='hh:mm:ss';
+SET DateFormat='DD.MM.YYYY';
+SET TimestampFormat='DD.MM.YYYY hh:mm:ss[.fff]';
+SET FirstWeekDay=0;
+SET BrokenWeeks=1;
+SET ReferenceDay=0;
+SET FirstMonthOfYear=1;
+SET CollationLocale='ru-RU';
+//SET CreateSearchIndexOnReload=1;
+SET MonthNames='янв.;февр.;мар.;апр.;мая;июн.;июл.;авг.;сент.;окт.;нояб.;дек.';
+SET LongMonthNames='январь;февраль;март;апрель;май;июнь;июль;август;сентябрь;октябрь;ноябрь;декабрь';
+SET DayNames='пн;вт;ср;чт;пт;сб;вс';
+SET LongDayNames='понедельник;вторник;среда;четверг;пятница;суббота;воскресенье';
+SET NumericalAbbreviation='3:k;6:M;9:G;12:T;15:P;18:E;21:Z;24:Y;-3:m;-6:μ;-9:n;-12:p;-15:f;-18:a;-21:z;-24:y';
+SET HidePrefix = '_';
+
+SET DIC_QVD_PATH = 'lib://OCDSKZData/01_DataBase_Contracts/02_QVD_DB/01_Dictionary/';
+SET TRN_QVD_PATH = 'lib://OCDSKZData/01_DataBase_Contracts/02_QVD_DB/02_Transaction/';
+SET DIC_QVD_PATH_TENDER = 'lib://OCDSKZData/01_DataBase/02_QVD_DB/01_Dictionary/';
+SET TRN_QVD_PATH_TENDER = 'lib://OCDSKZData/01_DataBase/02_QVD_DB/02_Transaction/';
+SET FILES_PATH = 'lib://OCDSKZData/01_DataBase_Contracts/01_DataFiles/';
+SET LOC_QVD_PATH = 'lib://OCDSKZData/01_DataBase/03_LocalFiles/';
+
+SET DIC_QVD_PATH_EEC = 'lib://OCDSKZData/01_DataBase_EEC/02_QVD_DB/01_Dictionary/'; //
+
+
+
+////-1. Store to qvd
+
+
+Helps:
+NoConcatenate
+LOAD
+    F1 as Index,
+    F2 as Reference,
+    F3 as Ru
+FROM [lib://OCDSKZ_Web_dev]
+(html, utf8, embedded labels, table is @1, url is '***')
+where F1 <> 'Index' and len(F1)>0
+;
+
+store Helps into [$(DIC_QVD_PATH_EEC)/Helps.qvd] (qvd);
+Drop table Helps;
+
+
+
+////0. Procedures
+
+
+//   ISO3code for short country names
+Directory [$(DIC_QVD_PATH_TENDER)];
+
+Countries:
+Mapping
+LOAD
+    Alias as countryShortName,
+    ISO3Code as threeLetterCode
+FROM [$(LOC_QVD_PATH)Countries.qvd] (qvd);
+
+SET vISO3code_set = "ApplyMap('Countries', Lower($1), $2)";
+
+
+////1. Transactions
+
+
+Directory [$(TRN_QVD_PATH_TENDER)];
+
+Tenders:
+LOAD IDTenderKey,
+    tender_procurementMethodDetails,
+    tender_subStatus,
+    tender_status,
+    tender_enquiryPeriod_startDate,
+    tender_tenderPeriod_startDate
+FROM [Tender.qvd]
+(qvd);
+
+Lots:
+LOAD
+    IDLotOrig,
+     lot_status,
+    lot_amount,
+     IDbuyerOrig,
+     IDTenderOrig,
+    IDLot as IDLotKey,
+    IDTenderKey,
+    IDbuyerKey
+    ,IDLotOrig&'|'&IDTenderOrig as _IDLotOrig
+FROM [Lot.qvd]
+(qvd)
+WHERE EXISTS(IDTenderKey)
+;
+
+Bids:
+LOAD
+    IDBidOrig,
+    bid_date,
+    bid_status,
+    bid_relatedLot,
+     IDtendererOrig,
+    IDtendererKey,
+    IDBid as IDBidKey,
+    IDLotKey
+    ,bid_relatedLot&'|'&IDTenderOrig as _IDLotOrig
+FROM [Bids.qvd]
+(qvd)
+WHERE EXISTS(_IDLotOrig, bid_relatedLot&'|'&IDTenderOrig)
+;
+
+Awards:
+LOAD
+     IDAwardOrig,
+    award_status,
+    award_date,
+    award_relatedBid,
+    award_place,
+    award_supplier_id,
+    award_supplier_name,
+    singleSourcePlanFlag,
+     IDTenderKey,
+     IDtendererKey,
+     IDAward as IDAwardKey,
+     IDAward,
+     IDBidKey
+FROM [Award.qvd]
+(qvd)
+WHERE EXISTS(IDBidKey)
+;
+
+
+AwardContracts:
+LOAD
+     contract_awardID,
+     IDContractOrig,
+     IDReleaseOCIDOrig,
+     IDTenderOrig,
+     IDTenderKey,
+    IDContractKey,
+    IDAwardKey
+FROM [ContractAwards.qvd]
+(qvd)
+WHERE EXISTS(IDAwardKey)
+;
+
+Contracts:
+LOAD
+    contract_contract_status,
+    IDContract as IDContractKey,
+    IDContractOrig
+FROM [Contract.qvd]
+(qvd);
+
+//adding tenderer's country
+
+Directory [$(DIC_QVD_PATH_TENDER)];
+
+Left join(Bids)
+LOAD
+     $(vISO3code_set([tenderer_countryName], NULL())) AS tenderer_countryName,
+    IDtenderer as IDtendererKey
+FROM [tenderer.qvd]
+(qvd);
+
+Left join(Awards)
+LOAD
+    $(vISO3code_set([supplier_countryName], NULL())) as supplier_countryName,
+    IDtendererKey
+FROM [supplier.qvd]
+(qvd);
+
+//Adding contracting data
+
+Directory [$(TRN_QVD_PATH)];
+
+Contracts_from_contracts:
+NoConcatenate
+LOAD
+    IDContractOrig,
+    contract_rootId,
+    contract_status,
+     contract_dateSigned,
+     contract_value_amount,
+    IDContract as IDContractKey
+FROM [Contracts.qvd]
+(qvd)
+;
+
+DROP FIELD IDLotOrig;
+RENAME FIELD _IDLotOrig TO IDLotOrig;
+
+
+////3. For KPI
+
+
+Let vTrace = NoOfRows('Contracts');
+Trace Before adding data from the contracting module to the contract table = $(vTrace);
+
+//Phase 1: Pre
+Left join(Contracts)
+Load contract_rootId,
+	 contract_rootId as IDContractOrig,
+	 LastValue(contract_value_amount) as contract_value_amount_from_contracting,
+     LastValue(contract_status) as contract_status_from_contracting
+Resident Contracts_from_contracts
+where WildMatch(contract_status, 'active', 'complete', 'terminated', 'partiallyComplete')
+group by contract_rootId
+;
+
+//For variable
+TmpContracts:
+NoConcatenate
+Load Distinct contract_rootId
+Resident Contracts_from_contracts
+where WildMatch(contract_status, 'active', 'complete', 'terminated', 'partiallyComplete')
+;
+
+Let vTotalValidContracts = NoOfRows('TmpContracts');
+
+drop table TmpContracts;
+
+Let vTrace = NoOfRows('Contracts');
+Trace AFTER adding data from the contracting module to the contract table = $(vTrace);
+
+//Adding Flag to lot that it has award and contract
+//Calculate bid status
+left join(AwardContracts)
+Load distinct IDContractKey,
+	 1 as award_is_contracted     
+Resident Contracts
+where contract_contract_status = 'active'
+;
+
+left join(AwardContracts)
+Load distinct IDContractKey,
+	 contract_value_amount_from_contracting,
+     contract_status_from_contracting,
+     contract_rootId
+Resident Contracts
+;
+
+
+drop table Contracts;
+
+
+left join(Awards)
+Load distinct IDAwardKey,
+	 award_is_contracted as award_is_contracted,
+     contract_value_amount_from_contracting,
+     contract_status_from_contracting,
+     contract_rootId
+Resident AwardContracts;
+
+
+Drop table AwardContracts;
+
+Left join(Bids)
+Load IDBidKey,
+	 award_is_contracted as award_is_contracted_,
+     award_status as award_status,
+     award_place as award_place
+     ,     
+     contract_value_amount_from_contracting,
+     contract_status_from_contracting,
+     contract_rootId
+Resident Awards;
+
+
+Left join(Lots)
+Load IDLotOrig,
+	 if(count(DISTINCT award_is_contracted_) > 0, Concat(DISTINCT award_is_contracted_), null()) as award_is_contracted_,
+     if(count(DISTINCT tenderer_countryName) > 0, Concat(DISTINCT tenderer_countryName), null()) as tenderer_countryName_
+     ,
+     if(count(DISTINCT contract_value_amount_from_contracting) > 0, Concat(DISTINCT contract_value_amount_from_contracting,';'), null()) AS contract_value_amount_from_contracting_,
+     if(count(DISTINCT contract_status_from_contracting) > 0, Concat(DISTINCT contract_status_from_contracting,';'), null()) AS contract_status_from_contracting_,
+     if(count(DISTINCT contract_rootId ) > 0,Concat(DISTINCT contract_rootId,';'), null()) AS contract_rootId_
+Resident Bids
+group by IDLotOrig
+;
+
+drop field award_is_contracted_ from Bids;
+
+drop fields contract_value_amount_from_contracting, contract_status_from_contracting, contract_rootId from Bids;
+
+Left join(Lots)
+Load IDTenderKey,
+	 Date(Floor(award_date)) as tender_date_noncomp,
+     1 as award_is_contracted_SSP,
+     supplier_countryName
+     ,
+     contract_value_amount_from_contracting as contract_value_amount_from_contracting_SSP,
+     contract_status_from_contracting as contract_status_from_contracting_SSP,
+     contract_rootId as contract_rootId_SSP
+Resident Awards
+where singleSourcePlanFlag = 1
+;
+
+drop table Awards;
+
+left join(Lots)
+Load IDLotOrig,
+	 Alt(award_is_contracted_, award_is_contracted_SSP) as lot_is_contracted
+     ,
+     if(not IsNull(contract_value_amount_from_contracting_), contract_value_amount_from_contracting_, contract_value_amount_from_contracting_SSP) as contract_value_amount_from_contracting,
+     if(not IsNull(contract_status_from_contracting_), contract_status_from_contracting_, contract_status_from_contracting_SSP) as contract_status_from_contracting,
+     if(not IsNull(contract_rootId_), contract_rootId_, contract_rootId_SSP) as contract_rootId
+     ,
+     if(not IsNull(tenderer_countryName_), tenderer_countryName_, supplier_countryName) as tenderer_countryName
+Resident Lots;
+
+drop fields award_is_contracted_, award_is_contracted_SSP from Lots;
+drop fields contract_value_amount_from_contracting_, contract_value_amount_from_contracting_SSP,
+			contract_status_from_contracting_, contract_status_from_contracting_SSP,
+            contract_rootId_, contract_rootId_SSP from Lots;
+drop fields supplier_countryName, tenderer_countryName_ from Lots;
+
+Left Join(Bids)
+Load IDBidOrig,
+	 if(bid_status = 'valid' and award_place = 1, 'winner', 
+     	if(bid_status = 'valid' and award_place = 2, 'secondPlace', 
+        	bid_status)) as bid_status_complex
+Resident Bids;
+
+drop fields award_status, award_place from Bids;
+
+//Calculate lot status
+Left join(Lots)
+Load IDTenderKey,	
+	 if(not IsNull(tender_subStatus), tender_subStatus, tender_status) as tender_subStatus,
+     Date(Floor(RangeMax(tender_enquiryPeriod_startDate, tender_tenderPeriod_startDate))) as tender_date_comp,
+     tender_procurementMethodDetails
+Resident Tenders;
+
+drop table Tenders;
+
+Left join(Lots)
+Load IDLotOrig,
+	 if(WildMatch(tender_procurementMethodDetails, 'singleSourcePlan'), tender_date_noncomp, tender_date_comp) as tender_date,
+     if(lot_status = 'active', tender_subStatus, lot_status) as lot_subStatus
+Resident Lots;
+
+drop fields tender_date_noncomp, tender_date_comp;
+
+//Recalculate lot status
+rename Field lot_subStatus to lot_subStatus_;
+
+Left join(Lots)
+Load IDLotOrig,
+	 if(lot_status = 'active' and lot_is_contracted = 1, 'complete', lot_subStatus_) as lot_subStatus
+Resident Lots;
+
+drop field lot_subStatus_;
+drop fields tender_subStatus;
+
+Drop fields bid_status, IDBidKey, IDtendererKey, lot_status, IDTenderKey, IDbuyerKey, lot_is_contracted;
+
+Left join(Lots)
+Load IDLotOrig
+	 ,Dual(Year(tender_date)&'-'&Month(tender_date), (Year(tender_date)-1) * 12 + Month(tender_date)) as [Год-Месяц]
+     ,Dual(Year(tender_date), YearStart(tender_date)) AS [Год]
+Resident Lots;
+
+//For variable
+TmpContracts2:
+NoConcatenate
+Load Distinct contract_rootId
+Resident Lots
+where WildMatch(contract_status_from_contracting, 'active', 'complete', 'terminated', 'partiallyComplete')
+;
+
+Let vValidContracts = NoOfRows('TmpContracts2');
+
+drop table TmpContracts2;
+
+drop table Contracts_from_contracts;
+
+//====Phase 2: group data into single table====
+
+Left join(Lots)
+Load IDLotOrig,
+	 IDBidOrig,
+     bid_status_complex
+Resident Bids;
+
+
+drop table Bids;
+
+
+GropedTable:
+NoConcatenate
+Load bid_status_complex,
+	 tenderer_countryName,
+     [Год-Месяц],
+     tender_procurementMethodDetails,
+     lot_subStatus,
+     contract_status_from_contracting,
+     LastValue(Год) as [Год],
+     count(DISTINCT IDBidOrig) as noOfBids,
+     count(DISTINCT IDLotOrig) as noOfLots,
+     sum(if(Previous(IDLotOrig) <> IDLotOrig, lot_amount, 0)) as lotsValue2,
+     sum(if(Previous(IDLotOrig) <> IDLotOrig, contract_value_amount_from_contracting, 0)) as contractsValue2
+Resident Lots
+group by bid_status_complex,
+	 tenderer_countryName,
+     [Год-Месяц],
+     tender_procurementMethodDetails,
+     lot_subStatus,
+     contract_status_from_contracting
+Order by IDLotOrig
+ 	 ;
+     
+Drop table Lots;
+
+
+
+////4. Variables
+
+
+
+SET vLotId = 'IDLotOrig';
+SET vLotValue = 'lotsValue2';
+SET vLotStatus = 'lot_subStatus';
+SET vProcurementMethod = 'tender_procurementMethodDetails';
+SET vTenderDatePublished = 'tender_date';
+SET vBidId = 'IDBidOrig';
+SET vBidStatus = 'bid_status_complex';
+SET vBidderCountry = 'tenderer_countryName';
+
+SET vContractID = '';
+SET vContractRoot = '';
+SET vContractValue = '';
+SET vContractOriginCountry = '';
+SET vContractProcurementCategory = '';
+
+SET vNoOfLots = 'noOfLots';
+SET vNoOfBids = 'noOfBids';
+SET vContractValue = 'contractsValue2';
+SET vContractStatus = 'contract_status_from_contracting';
+
+
+//====KPIs====
+
+SET PARAMS = (=replace('$1', ';', ',')); 
+
+
+SET _LOTS_COUNT_ = 'SUM({<$'&PARAMS&'>}  $(vNoOfLots)'&')';
+LET vLotsCount = $(_LOTS_COUNT_);
+
+SET _BIDS_COUNT_ = 'SUM({<$'&PARAMS&'>}  $(vNoOfBids)'&')';
+LET vBidsCount = $(_BIDS_COUNT_);
+
+SET _CONTRACT_AMOUNT_ = 'SUM({<$'&PARAMS&'>}  $(vContractValue)'&')';
+LET vContractsAmount = $(_CONTRACT_AMOUNT_);
+
+
+
+////5. Helps
+
+
+//====Tooltips
+Helps:
+LOAD
+    "Index",
+    Reference,
+    Ru
+FROM [$(DIC_QVD_PATH_EEC)Helps.qvd]
+(qvd);
+
+LET vTranslationsRows = NoOfRows('Helps');
+
+FOR i = 1 TO vTranslationsRows
+	LET hlpHelp$(i) = Peek('Ru', i-1, 'Helps');
+NEXT;
+
+DROP Table Helps;
+
+
+////exit script
+
+
+exit script;

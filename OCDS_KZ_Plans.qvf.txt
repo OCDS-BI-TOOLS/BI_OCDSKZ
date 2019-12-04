@@ -1,0 +1,1106 @@
+////Main 
+
+
+
+SET ThousandSep=' ';
+SET DecimalSep=',';
+SET MoneyThousandSep=' ';
+SET MoneyDecimalSep=',';
+SET MoneyFormat='# ##0,00 ₸;-# ##0,00 ₸';
+SET TimeFormat='hh:mm:ss';
+SET DateFormat='DD.MM.YYYY';
+SET TimestampFormat='DD.MM.YYYY hh:mm:ss[.fff]';
+SET FirstWeekDay=0;
+SET BrokenWeeks=1;
+SET ReferenceDay=0;
+SET FirstMonthOfYear=1;
+SET CollationLocale='ru-UA';
+//SET CreateSearchIndexOnReload=1;
+SET MonthNames='янв.;февр.;мар.;апр.;мая;июн.;июл.;авг.;сент.;окт.;нояб.;дек.';
+SET LongMonthNames='январь;февраль;март;апрель;май;июнь;июль;август;сентябрь;октябрь;ноябрь;декабрь';
+SET DayNames='пн;вт;ср;чт;пт;сб;вс';
+SET LongDayNames='понедельник;вторник;среда;четверг;пятница;суббота;воскресенье';
+SET NumericalAbbreviation='3:k;6:M;9:G;12:T;15:P;18:E;21:Z;24:Y;-3:m;-6:μ;-9:n;-12:p;-15:f;-18:a;-21:z;-24:y';
+SET HidePrefix = '_';
+SET MoneySign = '₸ ';
+
+SET DIC_QVD_PATH = 'lib://OCDSKZData/01_DataBase_Plans/02_QVD_DB/01_Dictionary/';
+SET TRN_QVD_PATH = 'lib://OCDSKZData/01_DataBase_Plans/02_QVD_DB/02_Transaction/';
+SET DIC_QVD_PATH_TENDER = 'lib://OCDSKZData/01_DataBase/02_QVD_DB/01_Dictionary/'; 
+SET TRN_QVD_PATH_TENDER = 'lib://OCDSKZData/01_DataBase/02_QVD_DB/02_Transaction/'; 
+SET FILES_PATH = 'lib://OCDSKZData/01_DataBase_Plans/01_DataFiles/';
+
+Set vPrefix = '_';
+SET Lan1Name = 'Ru';
+SET Lan2Name = 'En';
+SET Lan3Name = 'Kz';
+
+
+////-1. Store Dictionaries
+
+
+Multilang_Dictionaries:
+NoConcatenate
+LOAD
+    F1 as Index,
+    F2 as Reference,
+    F3 as Ru,
+    F4 as En,
+    F5 as Kz,
+    F6 as attributeOf
+FROM [lib://ProZorro ARM CPV (rbcgrp_karandin)]
+(html, utf8, embedded labels, table is @1, url is '***')
+where F1 <> 'Index' and len(F1)>0
+;
+
+store Multilang_Dictionaries into [$(DIC_QVD_PATH)/Multilang_Dictionaries.qvd] (qvd);
+Drop table Multilang_Dictionaries;
+
+Multilang_FieldNames:
+NoConcatenate
+LOAD
+    F1 as Index,
+    F2 as Reference,
+    F3 as Ru,
+    F4 as En,
+    F5 as Kz
+FROM [lib://ProZorro OCDS KZ]
+(html, utf8, embedded labels, table is @1, url is '***')
+where F1 <> 'Index' and len(F1)>0
+;
+
+store Multilang_FieldNames into [$(DIC_QVD_PATH)/Multilang_FieldNames.qvd] (qvd);
+Drop table Multilang_FieldNames;
+
+
+Multilang_Labels:
+NoConcatenate
+LOAD
+    F1 as "Index",
+    F2 as Reference,
+    F3 as Ru,
+    F4 as En,
+    F5 as Kz
+FROM [lib://ProZorro OCDS KZ]
+(html, utf8, embedded labels, table is @1, url is '***')
+where F1 <> 'Index' and len(F1)>0
+;
+
+store Multilang_Labels into [$(DIC_QVD_PATH)/Multilang_Labels.qvd] (qvd);
+Drop table Multilang_Labels;
+
+
+// Tooltips
+TranslationsHelp:
+LOAD 
+    F1 as "Index",
+    F2 as Reference,
+    F3 as Ru,
+    F4 as En,
+    F5 as Kz
+FROM [lib://ProZorro OCDS KZ]
+(html, utf8, embedded labels, table is @1, url is '***')
+where F1 <> 'Index' and len(F1)>0
+;
+
+Store TranslationsHelp into [$(DIC_QVD_PATH)TranslationsHelp.qvd] (qvd);
+
+Drop Table TranslationsHelp;
+
+
+////0. Procedures
+
+
+//Procedures for fields translations
+SUB translationsJoin (tableName, keyField)
+
+  FieldNames_tmp:
+  NoConcatenate
+  Load 
+      "Index",
+      [$(Lan1Name)],
+      [$(Lan2Name)],
+      [$(Lan3Name)]
+  Resident FieldNamesTable
+  where Index like '$(tableName)';
+  
+  TRACE $(tableName);
+
+  Let vLan1FieldName = Peek('$(Lan1Name)', -1, 'FieldNames_tmp');
+  Let vLan2FieldName = Peek('$(Lan2Name)', -1, 'FieldNames_tmp');
+  Let vLan3FieldName = Peek('$(Lan3Name)', -1, 'FieldNames_tmp');
+
+  left join("$(tableName)")
+  Load Index as "$(keyField)",
+       [$(Lan1Name)] as "$(vLan1FieldName)",
+       [$(Lan2Name)] as "$(vLan2FieldName)",
+       [$(Lan3Name)] as "$(vLan3FieldName)"
+  Resident InnerDictionaries
+  where attributeOf like '$(tableName)';
+
+  drop table FieldNames_tmp;
+
+END SUB;
+
+
+SUB translationsNewTable (newTableName, existingTableName, keyField)
+// 0 - w/o KEEP
+  FieldNames_tmp:
+  NoConcatenate
+  Load 
+      "Index",
+      [$(Lan1Name)],
+      [$(Lan2Name)],
+      [$(Lan3Name)]
+  Resident FieldNamesTable
+  where Index like '$(newTableName)';
+  
+  TRACE $(tableName);
+
+  Let vLan1FieldName = Peek('$(Lan1Name)', -1, 'FieldNames_tmp');
+  Let vLan2FieldName = Peek('$(Lan2Name)', -1, 'FieldNames_tmp');
+  Let vLan3FieldName = Peek('$(Lan3Name)', -1, 'FieldNames_tmp');
+
+  IF existingTableName <> 0 THEN
+    [$(newTableName)]:
+    left keep("$(existingTableName)")
+    Load 
+        "Index" as [$(keyField)],
+        [$(Lan1Name)] as [$(vLan1FieldName)],
+        [$(Lan2Name)] as [$(vLan2FieldName)],
+        [$(Lan3Name)] as [$(vLan3FieldName)]
+    Resident InnerDictionaries
+    where attributeOf like '$(newTableName)';
+    
+    ELSEIF existingTableName = 0 THEN
+    	[$(newTableName)]:
+    	Load 
+            "Index" as [$(keyField)],
+            [$(Lan1Name)] as [$(vLan1FieldName)],
+            [$(Lan2Name)] as [$(vLan2FieldName)],
+            [$(Lan3Name)] as [$(vLan3FieldName)]
+    	Resident InnerDictionaries
+    	where attributeOf like '$(newTableName)';
+   ENDIF
+
+  drop table FieldNames_tmp;
+
+END SUB;
+
+SUB translationsJoinInners(tableName, keyField)
+
+  JoinTypes:
+  Load Distinct Reference as joinType
+  Resident InnerDictionaries
+  where attributeOf like '$(tableName)';
+
+  For each vJoinType in FieldValueList('joinType')
+
+    left join("$(tableName)")
+    LOAD Index as "$(keyField)",
+         [$(Lan1Name)] as "$(vPrefix)$(tableName)$(vJoinType)$(Lan1Name)",
+         [$(Lan2Name)] as "$(vPrefix)$(tableName)$(vJoinType)$(Lan2Name)",
+         [$(Lan3Name)] as "$(vPrefix)$(tableName)$(vJoinType)$(Lan3Name)"
+    Resident InnerDictionaries
+    where attributeOf like '$(tableName)'
+    and Reference like '$(vJoinType)';
+
+  next vJoinType;
+
+  drop table JoinTypes;
+
+END SUB;
+
+
+////1. Transactions
+
+
+Directory [$(TRN_QVD_PATH)];
+
+MaxBudgetYear: //for correct default year
+LOAD
+    YEAR(Today()) AS plan_budgetYear
+AutoGenerate(1);
+
+Map_nonGov:
+Mapping LOAD 
+Null(),
+'$(vNonGov)'
+AutoGenerate(1);
+
+Map "item_fundingSource", "item_departmentalCode" 
+    using Map_nonGov;
+    
+Map_Months:
+Mapping LOAD * inline [
+month,		monthNum
+Январь, 	1
+Февраль, 	2
+Март, 		3
+Апрель, 	4
+Май, 		5
+Июнь, 		6
+Июль, 		7
+Август, 	8
+Сентябрь, 	9
+Октябрь, 	10
+Ноябрь, 	11
+Декабрь, 	12
+Прошлый год,0
+];
+
+Map item_plannedMonth using Map_Months;
+
+SET vNotIdentifiedName = 'notIdentified';
+
+Plan_Items:
+LOAD
+    IDItemOrig,
+    item_date,
+    item_rootId,
+    item_status,
+    plan_budgetYear,
+    IF(IsNull(item_procurementMethodDetails), '$(vNotIdentifiedName)', item_procurementMethodDetails) AS item_procurementMethodDetails,
+    item_isFromAssociationOfDisabled,
+    item_type,
+    item_procurementCategory,
+    item_quantity,
+    item_plannedMonth,
+    item_isPreliminaryPlan,
+    item_procurementMethodRationale,
+    item_fundingSource,
+    item_departmentalCode,
+    item_projectAdministratorID,
+    item_projectAdministratorName,
+    item_parentId,
+    plan_buyer_id,
+    plan_buyer_name_ru,
+    plan_buyer_name_kz,
+    item_classification_scheme,
+    IF(NOT WILDMATCH(item_classification_id, '??.??.??.???.???.??.????.????????????', '??????.???.??????'), '$(vNotIdentifiedName)', item_classification_id) AS item_classification_id,
+    item_unit_scheme,
+    item_unit_id,
+    item_unit_name,
+    item_unit_value_amount,
+    item_unit_value_currency,
+    IDItem,
+    IDItem as IDItemKey
+FROM [Plan_Items.qvd]
+(qvd);
+
+
+Plan_Item_DeliveryAddress:
+LOAD
+    item_deliveryAddress_countryName,
+    item_deliveryAddress_percentage,
+    item_deliveryAddress_id,
+    item_deliveryAddress_locality,
+    IDItemKey,
+    RowNo() as RecordNumberDeliveryAddress
+FROM [Plan_item_deliveryAddress.qvd]
+(qvd)
+Where exists(IDItemKey)
+;
+
+Plan_Item_Budget:
+LOAD
+    Item_budget_project,
+    Item_budget_projectID,
+    Item_budget_subsubprojectID,
+    Item_budget_subsubprojectName,
+    Item_budget_subproject,
+    Item_budget_subprojectID,
+    item_budget_amount,
+    item_budget_prepaymentPercent,
+    item_budget_currency,
+    item_budget_valueAddedTaxIncluded,
+    IDItemKey,
+   RowNo() as RecordNumberBudget
+FROM [Plan_item_budget.qvd]
+(qvd)
+where exists(IDItemKey)
+;
+
+
+
+////2.5 Dictionaries:Procurement
+
+
+
+Directory [$(DIC_QVD_PATH_TENDER)];
+
+ProcurementDictionary:
+LOAD
+    text(parent_id) as parent_id,
+    name_kz,
+    level_,
+    text(id) as id,
+    name_ru,
+    "r",
+    g,
+    text(code) as code,
+    s
+    ,edizm
+FROM [ProcurementDictionary.qvd]
+(qvd)
+;
+
+
+//Note: the whole dictionary is loaded for correct addition of Parent flag
+
+
+ProcurementDictionaryHierarchy:
+Load Distinct item_classification_id
+	 ,item_classification_id as code
+	 ,text(left(item_classification_id, 12)) as Vedomstvo
+     ,text(left(item_classification_id, 8)) as Group
+     ,text(left(item_classification_id, 5)) as SubClass
+     ,text(left(item_classification_id, 2)) as Class
+Resident Plan_Items
+Where WildMatch(item_classification_id,
+'??.??.??.???.???.??.????.????????????')
+;
+
+Concatenate(ProcurementDictionaryHierarchy)
+Load Distinct item_classification_id
+	 ,item_classification_id as code
+	 ,text(left(item_classification_id, 2)&'.'&mid(item_classification_id, 3, 2)&'.'&mid(item_classification_id, 5, 2)&mid(item_classification_id, 7, 4)) as Vedomstvo
+     ,text(left(item_classification_id, 2)&'.'&mid(item_classification_id, 3, 2)&'.'&mid(item_classification_id, 5, 2)) as Group
+     ,text(left(item_classification_id, 2)&'.'&mid(item_classification_id, 3, 2)) as SubClass
+     ,text(left(item_classification_id, 2)) as Class
+Resident Plan_Items
+Where WildMatch(item_classification_id,
+'??????.???.??????')
+;
+
+
+Let vTrace = NoOfRows('ProcurementDictionaryHierarchy');
+Trace No of Rows initial = $(vTrace);
+
+//adding field names
+left join(ProcurementDictionaryHierarchy)
+Load code,
+	 name_ru as code_nameRu,
+     name_kz as code_nameKz
+     ,name_ru&' - '&code as code_codeNameRu
+     ,name_kz&' - '&code as code_codeNameKz
+     ,edizm
+Resident ProcurementDictionary
+where WildMatch(code,
+'??.??.??.???.???.??.????.????????????',
+'??????.???.??????')
+;
+
+Let vTrace = NoOfRows('ProcurementDictionaryHierarchy');
+Trace No of Rows after CODE NAMES = $(vTrace);
+
+left join(ProcurementDictionaryHierarchy)
+Load code as Vedomstvo,
+	 name_ru as Vedomstvo_nameRu,
+     name_kz as Vedomstvo_nameKz
+     ,if(not IsNull(name_ru), ' - '&name_ru)&code as Vedomstvo_codeNameRu //проверка, поскольку на сейчас коды уровня ведомства в справочнике не передаются
+     ,if(not IsNull(name_kz), ' - '&name_kz)&code as Vedomstvo_codeNameKz //проверка, поскольку на сейчас коды уровня ведомства в справочнике не передаются
+Resident ProcurementDictionary
+where WildMatch(code,
+'??.??.??.???')
+;
+
+
+//names (name_ru) are multiplying (since code ??.??.?? can be related to both old and new dictionaries)
+
+//ChildNode for selecting correct code name
+left join(ProcurementDictionary)
+Load distinct parent_id as id,
+	 1 as isParent_flag
+Resident ProcurementDictionary
+;
+
+left join(ProcurementDictionaryHierarchy)
+Load code as Group,
+	 name_ru as Group_nameRu,
+     name_kz as Group_nameKz
+     ,name_ru&' - '&code as Group_codeNameRu
+     ,name_kz&' - '&code as Group_codeNameKz
+Resident ProcurementDictionary
+where WildMatch(code,
+'??.??.??')
+and isParent_flag = 1
+;
+
+left join(ProcurementDictionaryHierarchy)
+Load text(
+     	if(len(code) = 4, 
+     		code&'0',
+        		left(code, 5))) as SubClass, //handling case when code looks like ??.?
+	 name_ru as SubClass_nameRu,
+     name_kz as SubClass_nameKz
+     ,name_ru&' - '&code as SubClass_codeNameRu
+     ,name_kz&' - '&code as SubClass_codeNameKz
+Resident ProcurementDictionary
+Where 
+WildMatch(level_, 4)
+;
+
+left join(ProcurementDictionaryHierarchy)
+Load left(code, 2) as Class,
+	 name_ru as Class_nameRu,
+     name_kz as Class_nameKz
+     ,name_ru&' - '&left(code, 2) as Class_codeNameRu
+     ,name_kz&' - '&left(code, 2) as Class_codeNameKz
+Resident ProcurementDictionary
+where 
+level_ = 2
+;
+
+drop table ProcurementDictionary;
+
+rename fields 	Class_codeNameRu to Class_codeNameRu_, Class_codeNameKz to Class_codeNameKz_,
+				SubClass_codeNameRu to SubClass_codeNameRu_, SubClass_codeNameKz to SubClass_codeNameKz_,
+                Group_codeNameRu to Group_codeNameRu_, Group_codeNameKz to Group_codeNameKz_,
+                Vedomstvo_codeNameRu to Vedomstvo_codeNameRu_, Vedomstvo_codeNameKz to Vedomstvo_codeNameKz_,
+                code_codeNameRu to code_codeNameRu_, code_codeNameKz to code_codeNameKz_;
+                
+                
+left join(ProcurementDictionaryHierarchy)
+Load item_classification_id,
+	 if(IsNull(Class_codeNameRu_), Class, Class_codeNameRu_) as Class_codeNameRu,
+	 if(IsNull(Class_codeNameKz_), Class, Class_codeNameKz_) as Class_codeNameKz,
+	 if(IsNull(SubClass_codeNameRu_), SubClass, SubClass_codeNameRu_) as SubClass_codeNameRu,
+	 if(IsNull(SubClass_codeNameKz_), SubClass, SubClass_codeNameKz_) as SubClass_codeNameKz,
+	 if(IsNull(Group_codeNameRu_), Group, Group_codeNameRu_) as Group_codeNameRu,
+	 if(IsNull(Group_codeNameKz_), Group, Group_codeNameKz_) as Group_codeNameKz,
+	 if(IsNull(Vedomstvo_codeNameRu_), Vedomstvo, Vedomstvo_codeNameRu_) as Vedomstvo_codeNameRu,
+	 if(IsNull(Vedomstvo_codeNameKz_), Vedomstvo, Vedomstvo_codeNameKz_) as Vedomstvo_codeNameKz,
+	 if(IsNull(code_codeNameRu_), item_classification_id, code_codeNameRu_) as code_codeNameRu, //so that there are no empty values in codes that do not correspond to the new / old formats
+     if(IsNull(code_codeNameKz_), item_classification_id, code_codeNameKz_) as code_codeNameKz //so that there are no empty values in codes that do not correspond to the new / old formats
+     ,
+     if(IsNull(Class_codeNameRu_), Class, Class_codeNameRu_) as Class_codeNameEn,
+	 if(IsNull(SubClass_codeNameRu_), SubClass, SubClass_codeNameRu_) as SubClass_codeNameEn,
+	 if(IsNull(Group_codeNameRu_), Group, Group_codeNameRu_) as Group_codeNameEn,
+	 if(IsNull(Vedomstvo_codeNameRu_), Vedomstvo, Vedomstvo_codeNameRu_) as Vedomstvo_codeNameEn,
+	 if(IsNull(code_codeNameRu_), item_classification_id, code_codeNameRu_) as code_codeNameEn //so that there are no empty values in codes that do not correspond to the new / old formats
+Resident ProcurementDictionaryHierarchy;
+
+drop fields  Class_codeNameRu_,  Class_codeNameKz_,
+				SubClass_codeNameRu_,  SubClass_codeNameKz_,
+                 Group_codeNameRu_,  Group_codeNameKz_,
+                 Vedomstvo_codeNameRu_,  Vedomstvo_codeNameKz_,
+                 code_codeNameRu_,  code_codeNameKz_;
+
+
+UnregisteredCodes:
+LOAD * INLINE [
+_ru, _en, _kz
+Код ЕНСТРУ не опознан, ENSTRU code not identified, ТЖҚБНА жіктеуіш анықталмаған
+];
+
+CONCATENATE(ProcurementDictionaryHierarchy)
+LOAD '$(vNotIdentifiedName)' AS item_classification_id,
+	 _ru AS Class_codeNameRu,
+     _kz AS Class_codeNameKz,
+     _en AS Class_codeNameEn,
+	 _ru AS SubClass_codeNameRu,
+     _kz AS SubClass_codeNameKz,
+     _en AS SubClass_codeNameEn,
+	 _ru AS Group_codeNameRu,
+     _kz AS Group_codeNameKz,
+     _en AS Group_codeNameEn,
+	 _ru AS Vedomstvo_codeNameRu,
+     _kz AS Vedomstvo_codeNameKz,
+     _en AS Vedomstvo_codeNameEn,
+	 _ru AS code_codeNameRu,
+     _kz AS code_codeNameKz,
+     _en AS code_codeNameEn
+RESIDENT UnregisteredCodes;
+
+DROP TABLE UnregisteredCodes;
+
+
+
+////3. For KPIs
+
+
+//adding top-level fields of the hierarchy
+
+left join(Plan_Items)
+Load IDItemKey,        
+    if(WildMatch(item_departmentalCode, '$(vNonGov)'), '$(vNonGov)', '$(vGov)') as item_gov_type, //first level,
+    if(WildMatch(item_departmentalCode, '$(vNonGov)'), '$(vNonGov)', 
+    	if(WildMatch(item_fundingSource, 'charity', 'transfer', 'legalOrNaturalPerson'), '$(vNonBudget)', '$(vBudget)'))
+     		as item_budget_type //second hierarchy level
+Resident Plan_Items;
+
+left join(Plan_Items)
+Load IDItemKey,
+	 1 as itemValidForCalculations
+Resident Plan_Items
+Where not wildmatch(item_status, 'changed', 'delegated')
+;
+
+//adding a field for interface with certain statuses hidded from the users
+rename field item_status to item_status_complete;
+
+left join(Plan_Items)
+Load IDItemKey,
+	 item_status_complete as item_status
+Resident Plan_Items
+where not WildMatch(item_status_complete, 'changed', 'delegated')
+;
+
+//Item budget
+
+//for debug
+left join(Plan_Items)
+load IDItemKey,
+	 sum(item_budget_amount) as item_budget_amount_total
+Resident Plan_Item_Budget
+group by IDItemKey;
+
+
+Left join(Plan_Items)
+Load IDItemOrig,
+	 alt(item_budget_amount_total, item_quantity*item_unit_value_amount) as item_value //alt is present for debug
+Resident Plan_Items;
+
+//Concatenate IDs and Names for specified in the ToR fields
+Left join(Plan_Item_Budget)
+Load RecordNumberBudget,
+	 If(isNull(Item_budget_projectID) and isNull(Item_budget_project), '$(vNonDef)', Item_budget_project&'$(vMidChar)'&Item_budget_projectID) as item_budget_projectID_name,
+     If(isNull(Item_budget_subsubprojectID) and isNull(Item_budget_subsubprojectName), '$(vNonDef)', Item_budget_subsubprojectName&'$(vMidChar)'&Item_budget_subsubprojectID) as item_budget_subsubprojectID_name,
+     If(isNull(Item_budget_subprojectID) and isNull(Item_budget_subproject), '$(vNonDef)', Item_budget_subproject&'$(vMidChar)'&Item_budget_subprojectID) as item_budget_subprojectID_name
+Resident Plan_Item_Budget;
+
+left join(Plan_Items)
+Load IDItemKey,
+	 if(WildMatch(item_budget_type, '$(vNonGov)'), '$(vNonGov)',
+     	if(WildMatch(item_budget_type, '$(vNonBudget)'), '$(vNonBudget)',
+        	item_projectAdministratorName&'$(vMidChar)'&item_projectAdministratorID)) as item_projectAdministratorID_name
+Resident Plan_Items
+;
+
+//adding items which do not have Budget in json files (by design)
+
+Concatenate(Plan_Item_Budget)
+Load IDItemKey,
+	 if(WildMatch(item_budget_type, '$(vNonGov)'), '$(vNonGov)', '$(vNonBudget)') as item_budget_projectID_name,
+     if(WildMatch(item_budget_type, '$(vNonGov)'), '$(vNonGov)', '$(vNonBudget)') as item_budget_subsubprojectID_name,
+     if(WildMatch(item_budget_type, '$(vNonGov)'), '$(vNonGov)', '$(vNonBudget)') as item_budget_subprojectID_name,
+     item_value as item_budget_amount,
+     RowNo() as RecordNumberBudget
+Resident Plan_Items
+where WildMatch(item_budget_type, '$(vNonGov)', '$(vNonBudget)')
+;
+
+//concat names for buyer
+left join(Plan_Items)
+Load IDItemKey,
+	 plan_buyer_name_ru&'$(vMidChar)'&plan_buyer_id as plan_buyer_id_name_ru,
+	 plan_buyer_name_kz&'$(vMidChar)'&plan_buyer_id as plan_buyer_id_name_kz     
+Resident Plan_Items;
+
+//concat deliveryAddress
+left join(Plan_Item_DeliveryAddress)
+Load RecordNumberDeliveryAddress,
+	     item_deliveryAddress_countryName&if(not IsNull(item_deliveryAddress_locality), '$(vMidChar)'&item_deliveryAddress_locality) as item_deliveryAddress_full
+Resident Plan_Item_DeliveryAddress;
+
+
+//Flag for planned items for current year, but not executed yet
+left join(Plan_Items)
+Load IDItemKey,
+	 1 as _from_today_till_year_end_flag
+Resident Plan_Items
+where item_plannedMonth >= Num(Month(Today()))
+;
+
+//for debug
+left join(Plan_Items)
+Load IDItemKey,
+	 if(item_classification_id like '??.??.??.???.???.??.????.????????????', 1, 0) as _valid_classification_code_item_flag
+Resident Plan_Items
+;
+
+//Creating Link Table for Budget-Delivery Address - creating entity "Budget per address" which is a characteristic of an item
+LinkTable_Budget_DeliveryAdresses:
+Load IDItemKey,
+	 RecordNumberBudget,
+     item_budget_amount
+Resident Plan_Item_Budget;
+
+Left join(LinkTable_Budget_DeliveryAdresses)
+Load IDItemKey,
+	 RecordNumberDeliveryAddress,
+     RecordNumberDeliveryAddress as RecordNumberDeliveryAddress_for_control,
+     item_deliveryAddress_percentage
+Resident Plan_Item_DeliveryAddress;
+
+Concatenate(LinkTable_Budget_DeliveryAdresses)
+Load IDItemKey,
+	 RecordNumberDeliveryAddress,
+     item_deliveryAddress_percentage
+Resident Plan_Item_DeliveryAddress
+where not exists(RecordNumberDeliveryAddress_for_control, RecordNumberDeliveryAddress);
+
+drop field RecordNumberDeliveryAddress_for_control;
+
+left join(LinkTable_Budget_DeliveryAdresses)
+Load IDItemKey,
+	 RecordNumberBudget,
+     RecordNumberDeliveryAddress,
+     round(round(item_budget_amount*item_deliveryAddress_percentage*0.01, 0.0001), 0.01) as item_budget_amount_per_address
+Resident LinkTable_Budget_DeliveryAdresses;
+
+drop fields item_budget_amount, item_deliveryAddress_percentage from LinkTable_Budget_DeliveryAdresses;
+drop field IDItemKey from Plan_Item_Budget;
+
+//Relocate quantity into DeliveryAddress Table
+left join(Plan_Item_DeliveryAddress)
+Load IDItemKey,
+	 item_quantity
+Resident Plan_Items;
+
+left join(Plan_Item_DeliveryAddress)
+Load RecordNumberDeliveryAddress,
+	 round(round(item_quantity*item_deliveryAddress_percentage*0.01, 0.00001), 0.001) as item_quantity_per_address
+Resident Plan_Item_DeliveryAddress;
+
+drop Field item_quantity from Plan_Item_DeliveryAddress;
+
+
+Left Join (Plan_Items)
+Load
+	 IDItemOrig,
+     Dual(plan_budgetYear&'-'&alt(Month(MakeDate(plan_budgetYear,item_plannedMonth)), 'Прошлый год'), plan_budgetYear* 12 + item_plannedMonth) as [item_plannedYearMonth]
+Resident Plan_Items
+;   
+
+left join(Plan_Items)
+Load item_classification_id,
+	 Group as item_classification_group
+Resident ProcurementDictionaryHierarchy;
+
+left join(Plan_Items)
+Load IDItemOrig,
+     plan_buyer_id
+     &'|'&plan_budgetYear
+     &'|'&item_plannedMonth
+     &'|'&if(IsNull(item_classification_group), item_classification_id, item_classification_group)
+	 &'|'&item_procurementMethodDetails
+     as IDAnnualLineOrig
+Resident Plan_Items;
+
+drop fields item_classification_group  from Plan_Items;
+
+//Finalize
+
+left join(Plan_Item_DeliveryAddress)
+Load RecordNumberDeliveryAddress,
+	 IDItemKey as IDItemKey_for_debug
+Resident Plan_Item_DeliveryAddress;
+
+drop field IDItemKey from Plan_Item_DeliveryAddress;
+
+
+////4. Variables
+
+
+//====Fields====
+SET vItemId = '"Код пункта плана"';
+SET vItemStatus = '_item_status';//not present in json
+SET vItemValue = '[Планируемая сумма]';
+SET vItemQuantity = 'item_quantity_per_address';
+SET vItemUnitPrice = '[Стоимость единицы предмета закупки]';
+SET vItemProcurementCategory = '_item_procurementCategory';
+SET vItemBudgetYear = '[Бюджетный год плана]';
+SET vItemPlannedMonth = '_item_plannedMonth';
+SET vItemEnstru = '[ЕНСТРУ код]';
+SET vItemPreliminary = '_item_isPreliminaryPlan';
+SET vItemAnnualPlanStatus = 'plan_status';
+SET vItemFromAssocOfDisabled = '_item_isFromAssociationOfDisabled';
+SET vItemType = '_item_type';
+SET vItemProcurementMethod = '_item_procurementMethodDetails';
+
+SET vBudgetFundingSource = '_item_fundingSource';
+SET vBudgetDepartmentalCode = '"Код ГУ"';
+SET vBudgetProjectAdministrator = '[КодИмя бюджетного администратора]';
+SET vBudgetProject = '"Программа"';
+SET vBudgetSubproject = '"Подпрогамма"';
+SET vBudgetSubsubproject = '"Специфика"';
+SET vBudgetValue = ''; 
+
+SET vBuyerId = '[Код заказчика]';
+SET vBuyerNameID = '[КодИмя заказчика]';
+
+SET vAnnualLineId = '"Код годовой линии плана"';
+SET vAnnualLineValue = '';
+SET vAnnualLineEnstru = '';
+SET vAnnualLineProcurementMethod = '';
+SET vAnnualPlanYear = '';
+SET vAnnualLinePlannedMonth = '';
+
+SET vDeliveryAddressFull = '"Полный адрес поставки"';
+SET vDeliveryAddressCountry = '"Страна поставки"';
+SET vDeliveryAddressLocality = '"Адрес поставки"';
+SET vDeliveryAddressPercentage = '"Процент товара на адрес поставки"';
+
+//====Additional vars====
+
+
+SET vGov = 'ГУ'; 						//value for procurement items of non-governmental institutions
+SET vNonGov = 'Не ГУ'; 					//value for procurement items of non-governmental institutions
+SET vNonBudget = 'ГУ без указания БК'; 	//value for non-budget items
+SET vBudget = 'ГУ с указанием БК'; 		//value for procurement items from the budget
+SET vNonDef = 'Не указан';		 		//values for mapping zeros in subProject
+
+SET vMidChar = ' - ';					//concat delimiter
+//FIelds
+SET vGovType = '"Тип субъекта ГЗ"';
+SET vBudgetType = '"Тип бюджета"';
+//Vis Fields
+SET visBudgetFundingSource = '"Источник финансирования"';
+SET vValidItemFlag = 'itemValidForCalculations';
+
+//====Attributes====
+SET VALID_ITEMS = '$(vValidItemFlag)={1}';
+
+//====KPIs====
+SET PARAMS = (=replace('$1', ';', ',')); 
+
+SET _ITEM_AMOUNT_ = 'SUM({<$'&PARAMS&'>} $(vItemValue)'&')';
+LET expItemAmount = $(_ITEM_AMOUNT_);
+
+SET _ITEM_QUANTITY_ = 'SUM({<$'&PARAMS&'>} $(vItemQuantity)'&')';
+LET expItemQuantity = $(_ITEM_QUANTITY_);
+
+
+
+////4.5 Multilang
+
+
+//====Field Names of Multilang dictionaries
+FieldNamesTable:
+NoConcatenate
+LOAD
+    "Index",
+    Reference,
+    Ru,
+    En,
+    Kz
+FROM [$(DIC_QVD_PATH)//Multilang_FieldNames.qvd]
+(qvd);
+
+//Multilang inner dictionaries
+InnerDictionaries:
+NoConcatenate
+LOAD
+    "Index",
+    Reference,
+    Ru,
+    En,
+    Kz,
+    attributeOf
+FROM [$(DIC_QVD_PATH)//Multilang_Dictionaries.qvd]
+(qvd);
+
+set Verbatim = 1;
+//Multilang translations
+Translations:
+NoConcatenate
+load     "Index",
+    Reference,
+    Ru,
+    En,
+    Kz
+From [$(DIC_QVD_PATH)Multilang_Labels.qvd] (qvd);
+
+Language:
+CROSSTABLE (Language, Translation) LOAD 
+	 Index, 
+     Ru,
+     En,
+     Kz
+RESIDENT Translations;
+
+LanguageList:
+LOAD Distinct
+	 Language as _Language
+RESIDENT Language
+WHERE Language > 0;
+
+left join(LanguageList)
+LOAD
+    Index as [_Language],
+    Ru as [Index_]
+Resident InnerDictionaries
+where attributeOf like 'LanguageList'
+;
+
+DROP TABLE Translations;
+
+// Multilang interface vars
+LET T = replace('_T_$1_@(=FirstSortedValue(distinct _Language, Index_))', '@', '$');
+
+LET vTranslationsRows = NoOfRows('Language');
+
+FOR i = 0 TO vTranslationsRows - 1 
+	LET _vTranslationId = Peek('Index', i, 'Language');
+	LET _vTranslation = Peek('Translation', i, 'Language');
+	LET _vTrLanguage = Peek('Language', i, 'Language');
+	
+	LET _vTrName = '_T_$(_vTranslationId)_$(_vTrLanguage)';
+	LET $(_vTrName) = '$(_vTranslation)';
+	
+
+	LET _vTranslationId =;
+	LET _vTranslation =;
+	LET _vTrLanguage =;
+	LET _vTrName =;
+NEXT;
+
+DROP Table Language;
+
+
+// Multilang tooltip
+Translations:
+Load 
+	 "Index",
+     Ru,
+     En,
+     Kz
+From [$(DIC_QVD_PATH)TranslationsHelp.qvd] (qvd);
+
+Language:
+CROSSTABLE (Language, Translation) LOAD 
+	 Index, 
+     Ru,
+     En,
+     Kz
+RESIDENT Translations;
+
+// Multilang tooltip vars
+LET H = replace('_H_$1_@(=FirstSortedValue(_Language, Index_))', '@', '$');
+
+LET vTranslationsRows = NoOfRows('Language');
+
+FOR i = 0 TO vTranslationsRows - 1 
+	LET _vTranslationId = Peek('Index', i, 'Language');
+	LET _vTranslation = Peek('Translation', i, 'Language');
+	LET _vTrLanguage = Peek('Language', i, 'Language');
+	
+	LET _vTrName = '_H_$(_vTranslationId)_$(_vTrLanguage)';
+	LET $(_vTrName) = '$(_vTranslation)';
+	
+	LET _vTranslationId =;
+	LET _vTranslation =;
+	LET _vTrLanguage =;
+	LET _vTrName =;
+NEXT
+
+DROP Tables Language, Translations;
+
+
+////5. Interface Tables
+
+
+
+
+CALL translationsNewTable('FromTodayTillYearEnd', 0, '_from_today_till_year_end_flag');
+
+
+CALL translationsNewTable('MonthNames', 0, 'item_plannedMonth');
+CALL translationsNewTable('Plan_ItemsProcurementMethodDetails', 'Plan_Items', 'item_procurementMethodDetails');
+
+CALL translationsNewTable('ProcurementCategory', 'Plan_Items', 'item_procurementCategory');
+
+CALL translationsNewTable('ItemTypes', 'Plan_Items', 'item_type');
+
+CALL translationsNewTable('isPreliminaryPlan', 'Plan_Items', 'item_isPreliminaryPlan');
+CALL translationsNewTable('isFromAssociationOfDisabled', 'Plan_Items', 'item_isFromAssociationOfDisabled');
+
+
+CALL translationsNewTable('PlanItemStatus', 'Plan_Items', 'item_status');
+
+CALL translationsNewTable('BudgetFundingSource', 'Plan_Items', 'item_fundingSource');
+
+CALL translationsNewTable('ItemGovType', 'Plan_Items', 'item_gov_type');
+CALL translationsNewTable('ItemBudgetType', 'Plan_Items', 'item_budget_type');
+
+SET NumConvertRu = "Pick(RangeSum(Floor(LOG10($1)),1), NUM($1, '# ##0'), NUM($1, '# ##0'), NUM($1, '# ##0'), NUM($1/1000, '# ##0,00 $(_T_1_Ru)', ',', ' '), NUM($1/1000, '# ##0,00 $(_T_1_Ru)', ',', ' '), NUM($1/1000, '# ##0,00 $(_T_1_Ru)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_Ru)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_Ru)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_Ru)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_Ru)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_Ru)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_Ru)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_Ru)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_Ru)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_Ru)', ',', ' '))";
+SET NumConvertEn = "Pick(RangeSum(Floor(LOG10($1)),1), NUM($1, '# ##0'), NUM($1, '# ##0'), NUM($1, '# ##0'), NUM($1/1000, '# ##0,00 $(_T_1_En)', ',', ' '), NUM($1/1000, '# ##0,00 $(_T_1_En)', ',', ' '), NUM($1/1000, '# ##0,00 $(_T_1_En)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_En)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_En)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_En)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_En)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_En)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_En)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_En)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_En)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_En)', ',', ' '))";
+SET NumConvertKz = "Pick(RangeSum(Floor(LOG10($1)),1), NUM($1, '# ##0'), NUM($1, '# ##0'), NUM($1, '# ##0'), NUM($1/1000, '# ##0,00 $(_T_1_Kz)', ',', ' '), NUM($1/1000, '# ##0,00 $(_T_1_Kz)', ',', ' '), NUM($1/1000, '# ##0,00 $(_T_1_Kz)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_Kz)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_Kz)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_Kz)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_Kz)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_Kz)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_Kz)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_Kz)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_Kz)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_Kz)', ',', ' '))";
+
+//Rename INNER DICTIONARIES fields
+TempRu:
+
+Load * inline [
+init_name, join_field
+Class_codeNameRu,ENSTRUClass
+SubClass_codeNameRu,ENSTRUSubclass
+Group_codeNameRu,ENSTRUGroup
+Vedomstvo_codeNameRu,ENSTRUVedomstvo
+code_codeNameRu,ENSTRUCode
+plan_buyer_id_name_ru,BuyerCodeName
+];
+
+left join(TempRu)
+Load Ru as correct_name,
+	 "Index" as join_field
+Resident FieldNamesTable
+Where WildMatch(Index, 'ENSTRU*', 'BuyerCodeName')
+;
+
+TempKz:
+NoConcatenate
+Load * inline [
+init_name, join_field
+Class_codeNameKz,ENSTRUClass
+SubClass_codeNameKz,ENSTRUSubclass
+Group_codeNameKz,ENSTRUGroup
+Vedomstvo_codeNameKz,ENSTRUVedomstvo
+code_codeNameKz,ENSTRUCode
+plan_buyer_id_name_kz,BuyerCodeName
+];
+
+left join(TempKz)
+Load Kz as correct_name,
+	 "Index" as join_field
+Resident FieldNamesTable
+Where WildMatch(Index, 'ENSTRU*', 'BuyerCodeName')
+;
+
+Concatenate(TempRu)
+Load *
+Resident TempKz;
+
+drop table TempKz;
+
+Temp:
+Mapping
+Load init_name as init_name_,
+	 correct_name as correct_name_
+Resident TempRu;
+
+drop table TempRu;
+
+Rename fields using Temp;
+
+//Finalize
+Drop tables FieldNamesTable, InnerDictionaries;
+
+
+
+////6. FieldNames Mapping
+
+
+
+DROP TABLE MaxBudgetYear;
+
+MapTable:
+Mapping
+Load * inline [
+Field_orig,Field_Name
+IDAnnualLineOrig,Код годовой линии плана
+IDItemKey
+IDItemKey_for_debug
+IDItemOrig,Код пункта плана
+IDPlanKey
+IDPlanOrig,Код плана
+item_budget_amount,_item_budget_amount
+item_budget_amount_per_address,Планируемая сумма
+item_budget_amount_total,_item_budget_amount_total
+item_budget_currency,Валюта планируемой суммы плана
+item_budget_prepaymentPercent,Процент предоплаты
+Item_budget_project,Программа (название)
+Item_budget_projectID,Программа (код)
+item_budget_projectID_name,Программа
+Item_budget_subproject,Подпрограмма (название)
+Item_budget_subprojectID,Подпрограмма (код)
+item_budget_subprojectID_name,Подпрогамма
+Item_budget_subsubprojectID,Специфика (код)
+item_budget_subsubprojectID_name,Специфика
+Item_budget_subsubprojectName,Специфика (название)
+item_budget_valueAddedTaxIncluded,НДС планируемой суммы плана
+item_classification_id,ЕНСТРУ код
+item_classification_scheme,Схема классификации товара
+item_date,Дата пункта плана
+item_deliveryAddress_countryName,Страна поставки
+item_deliveryAddress_full,Полный адрес поставки
+item_deliveryAddress_id,КАТО код адреса поставки
+item_deliveryAddress_locality,Адрес поставки
+item_deliveryAddress_percentage,Процент товара на адрес поставки
+item_departmentalCode,Код ГУ
+item_fundingSource,_item_fundingSource
+item_isFromAssociationOfDisabled,_item_isFromAssociationOfDisabled
+item_isPreliminaryPlan,_item_isPreliminaryPlan
+item_lotId,Код лота
+item_parentId,_item_parentId
+item_plannedMonth,_item_plannedMonth
+item_plannedMonth_Names,Планируемый месяц закупки
+item_plannedYearMonth,Планируемый ГодМесяц закупки
+item_procurementCategory,_item_procurementCategory
+item_procurementMethodDetails,_item_procurementMethodDetails
+item_projectAdministratorID
+item_projectAdministratorID_name,КодИмя бюджетного администратора
+item_projectAdministratorName
+item_quantity
+item_quantity_per_address
+item_rootId
+item_tenderId
+item_type,_item_type
+item_unit_id
+item_unit_scheme
+item_unit_value_amount,Стоимость единицы предмета закупки
+item_unit_value_currency
+item_value
+plan_actNumber
+plan_budgetYear,Бюджетный год плана
+plan_buyer_id,Код заказчика
+plan_buyer_id_name_ru,КодИмя заказчика
+plan_buyer_id_name_kz,КодИмя заказчика KZ
+plan_buyer_name_kz,Имя участника KZ
+plan_buyer_name_ru,Имя участника
+plan_date
+plan_dateConfirmed
+plan_status
+plan_value_amount
+plan_value_currency
+RecordNumberBudget
+RecordNumberDeliveryAddress
+SubClass,Подкласс ЕНСТРУ (код)
+SubClass_codeNameRu,Подкласс ЕНСТРУ
+SubClass_codeNameKz,Подкласс ЕНСТРУ KZ
+SubClass_nameRu, Подкласс ЕНСТРУ (название)
+Vedomstvo,Ведомственный классификатор ЕНСТРУ (код)
+Vedomstvo_codeNameRu,Ведомственный классификатор ЕНСТРУ
+Vedomstvo_codeNameKz,Ведомственный классификатор ЕНСТРУ KZ
+Vedomstvo_nameRu, Ведомственный классификатор (название)
+Group,Группа ЕНСТРУ (код)
+Group_codeNameRu,Группа ЕНСТРУ
+Group_codeNameKz,Группа ЕНСТРУ KZ
+Class,Класс ЕНСТРУ (код)
+Class_codeNameRu,Класс ЕНСТРУ
+Class_codeNameKz,Класс ЕНСТРУ KZ
+Class_nameRu,Класс (название)
+code,ЕНСТРУ классификатор (код)
+code_codeNameRu,ЕНСТРУ классификатор
+code_codeNameKz,ЕНСТРУ классификатор KZ
+code_nameRu,ЕНСТРУ классификатор (название)
+item_status,_item_status
+item_status_complete,_item_status_complete
+Class_codeNameEn,GSW class
+SubClass_codeNameEn,GSW subclass
+Group_codeNameEn,GSW group
+Vedomstvo_codeNameEn,GSW departmental classification
+code_codeNameEn,GSW classifier
+item_unit_name,Единица измерения товара
+] (delimiter is ',');
+
+
+Rename Fields using MapTable;
+
+
+
+////7. exit script
+
+
+exit script;

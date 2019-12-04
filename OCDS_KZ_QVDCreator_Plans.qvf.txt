@@ -1,0 +1,503 @@
+////Main 
+
+
+//ToR link address is ***
+
+SET ThousandSep=' ';
+SET DecimalSep=',';
+SET MoneyThousandSep=' ';
+SET MoneyDecimalSep=',';
+SET MoneyFormat='# ##0,00 ₴;-# ##0,00 ₴';
+SET TimeFormat='hh:mm:ss';
+SET DateFormat='DD.MM.YYYY';
+SET TimestampFormat='DD.MM.YYYY hh:mm:ss[.fff]';
+SET FirstWeekDay=0;
+SET BrokenWeeks=1;
+SET ReferenceDay=0;
+SET FirstMonthOfYear=1;
+SET CollationLocale='ru-UA';
+SET CreateSearchIndexOnReload=1;
+SET MonthNames='янв.;февр.;мар.;апр.;мая;июн.;июл.;авг.;сент.;окт.;нояб.;дек.';
+SET LongMonthNames='январь;февраль;март;апрель;май;июнь;июль;август;сентябрь;октябрь;ноябрь;декабрь';
+SET DayNames='пн;вт;ср;чт;пт;сб;вс';
+SET LongDayNames='понедельник;вторник;среда;четверг;пятница;суббота;воскресенье';
+SET NumericalAbbreviation='3:k;6:M;9:G;12:T;15:P;18:E;21:Z;24:Y;-3:m;-6:μ;-9:n;-12:p;-15:f;-18:a;-21:z;-24:y';
+
+SET DIC_QVD_PATH = 'lib://OCDSKZData_dev/01_DataBase_Plans/02_QVD_DB/01_Dictionary/';
+SET TRN_QVD_PATH = 'lib://OCDSKZData_dev/01_DataBase_Plans/02_QVD_DB/02_Transaction/';
+SET FILES_PATH = 'lib://OCDSKZData_dev/01_DataBase_Plans/01_DataFiles/';
+
+SET vBatchLimit = '?limit=500';
+SET vBatchLimit_ = '&limit=500';
+SET vMode = '';//'&mode=_all_';
+SET vMethod = 'get';
+
+SET vBaseURL = '***'; // Prod 
+
+SET vURL = '';
+Trace vURL IS $(vURL); 
+
+LIB CONNECT TO 'OCDS KZ PLANS';
+
+
+////2. Procedures
+
+
+// Convert Boolean values
+BoolMap:
+Mapping
+Load * Inline [
+BoolValue, BoolValueNum
+true,	   1
+false,	   0
+];
+
+SET vBoolConvert = "ApplyMap('BoolMap', Lower($1), $1)";
+
+// Convert dates and timestamps format
+SET vDateConvert = "ConvertToLocalTime($1, 'GMT+06:00')";
+SET vFloorDateConvert = "Date(Floor(ConvertToLocalTime($1, 'GMT+06:00')))";
+
+
+////3. Offset Initial
+
+
+if NOT Isnull( FileSize('$(DIC_QVD_PATH)OffsetTable.txt') ) THEN
+OffsetTable:
+LOAD uri
+FROM
+[$(DIC_QVD_PATH)OffsetTable.txt]
+(txt, utf8, embedded labels, delimiter is ',', msq);
+
+LET vURL = Peek('uri', -1, 'OffsetTable');
+DROP Table OffsetTable;
+
+ELSE
+
+LET vURL = vBaseURL&vBatchLimit;
+ENDIF;
+
+SET RowsQtyTenderHeaders = 0;
+
+
+Trace URL IS $(vURL);
+
+DO
+
+if NOT Isnull( FileSize('$(DIC_QVD_PATH)OffsetTableAll.txt') ) THEN
+ADDOffsetTable:
+LOAD
+    offsetURI,
+    loadTime
+FROM [$(DIC_QVD_PATH)OffsetTableAll.txt]
+(txt, utf8, embedded labels, delimiter is ',', msq);
+ELSE 
+ADDOffsetTable:
+load * inline [
+offsetURI, loadTime
+];
+ENDIF;
+
+TRACE;
+TRACE THE URL IS $(vURL);
+
+
+
+////4. MasterTable
+
+
+RestConnectorMasterTable:
+SQL SELECT 
+	"uri" AS "uri_u1",
+	"publishedDate",
+	"__KEY_root",
+	(SELECT 
+		"id" AS "id_u4",
+		"date",
+		"rootId",
+		"status",
+		"budgetYear",
+		"procurementMethodDetails",
+		"isFromAssociationOfDisabled",
+		"type",
+		"procurementCategory",
+		"quantity",
+		"plannedMonth",
+		"isPreliminaryPlan",
+		"procurementMethodRationale",
+		"fundingSource",
+		"departmentalCode",
+		"projectAdministratorID",
+		"projectAdministratorName",
+		"parentId",
+		"__KEY_plans",
+		"__FK_plans",
+		(SELECT 
+			"id" AS "id_u0",
+			"name_ru",
+			"name_kz",
+			"__FK_buyer"
+		FROM "buyer" FK "__FK_buyer"),
+		(SELECT 
+			"scheme" AS "scheme_u0",
+			"id" AS "id_u1",
+			"name" AS "name_u0",
+			"__KEY_units",
+			"__FK_units",
+			(SELECT 
+				"amount",
+				"currency",
+				"__FK_value"
+			FROM "value" FK "__FK_value")
+		FROM "units" PK "__KEY_units" FK "__FK_units"),
+		(SELECT 
+			"scheme" AS "scheme_u1",
+			"id" AS "id_u2",
+			"__FK_classification"
+		FROM "classification" FK "__FK_classification"),
+		(SELECT 
+			"countryName",
+			"percentage",
+			"id" AS "id_u3",
+			"locality",
+			"__FK_deliveryAddresses"
+		FROM "deliveryAddresses" FK "__FK_deliveryAddresses"),
+		(SELECT 
+			"project",
+			"projectID",
+			"subproject",
+			"subprojectID",
+			"subsubprojectID",
+			"subsubprojectName",
+			"__KEY_budget",
+			"__FK_budget",
+			(SELECT 
+				"amount" AS "amount_u0",
+				"prepaymentPercent",
+				"currency" AS "currency_u0",
+				"valueAddedTaxIncluded",
+				"__FK_value_u0"
+			FROM "value" FK "__FK_value_u0")
+		FROM "budget" PK "__KEY_budget" FK "__FK_budget")
+	FROM "plans" PK "__KEY_plans" FK "__FK_plans"),
+	(SELECT 
+		"uri" AS "uri_u0",
+		"offset",
+		"__FK_next_page"
+	FROM "next_page" FK "__FK_next_page")
+FROM JSON (wrap on) "root" PK "__KEY_root"
+WITH CONNECTION(URL "$(vURL)");
+
+
+
+////5. Store to QVD
+
+
+//====Plan Items====
+
+
+[items]:
+LOAD	[id_u4] as [IDItemOrig],
+	$(vDateConvert([date])) as [item_date], 
+	[rootId] as [item_rootId],
+	[status] as [item_status],
+	[budgetYear] as [plan_budgetYear],
+	[procurementMethodDetails] as [item_procurementMethodDetails],
+	$(vBoolConvert([isFromAssociationOfDisabled])) AS [item_isFromAssociationOfDisabled],
+	[type] as [item_type],
+	[procurementCategory] as [item_procurementCategory],
+	[quantity] as [item_quantity],
+	[plannedMonth] as [item_plannedMonth],
+	$(vBoolConvert([isPreliminaryPlan])) AS [item_isPreliminaryPlan],
+	[procurementMethodRationale] as [item_procurementMethodRationale],
+	[fundingSource] as [item_fundingSource],
+	text([departmentalCode]) AS [item_departmentalCode],
+	text([projectAdministratorID]) AS [item_projectAdministratorID],
+	[projectAdministratorName] AS [item_projectAdministratorName],
+	[parentId] AS [item_parentId],
+	[__KEY_plans],
+	[__FK_plans] AS [__KEY_root]
+RESIDENT RestConnectorMasterTable
+WHERE NOT IsNull([__FK_plans]);
+
+LET RowsQtyTenderHeaders = NoOfRows('items');
+
+left join(items)
+LOAD	text([id_u0]) as [plan_buyer_id],
+	[name_ru] as [plan_buyer_name_ru],
+	[name_kz] as [plan_buyer_name_kz],
+	[__FK_buyer] AS [__KEY_plans]
+RESIDENT RestConnectorMasterTable
+WHERE NOT IsNull([__FK_buyer]);
+
+left join(items)
+LOAD	[scheme_u1] as [item_classification_scheme],
+	text([id_u2]) as [item_classification_id],
+	[__FK_classification] AS [__KEY_plans]
+RESIDENT RestConnectorMasterTable
+WHERE NOT IsNull([__FK_classification]);
+
+[units]:
+LOAD	
+	 [scheme_u0] as [item_unit_scheme],
+	[id_u1] as [item_unit_id],
+	[name_u0] as [item_unit_name],
+	[__KEY_units],
+	[__FK_units] AS [__KEY_plans]
+RESIDENT RestConnectorMasterTable
+WHERE NOT IsNull([__FK_units]);
+
+left join(units)
+LOAD	
+	 [amount] as [item_unit_value_amount],
+	[currency] as [item_unit_value_currency],
+	[__FK_value] AS [__KEY_units]
+RESIDENT RestConnectorMasterTable
+WHERE NOT IsNull([__FK_value]);
+
+left join(items)
+LOAD 	
+	[item_unit_scheme],
+	[item_unit_id],
+	[item_unit_name],
+	[item_unit_value_amount],
+	[item_unit_value_currency],
+	[__KEY_plans]
+Resident units;
+
+drop table units;
+
+if NOT Isnull( FileSize('$(TRN_QVD_PATH)Plan_Items.qvd')) THEN
+Concatenate (items)
+LOAD [IDItemOrig],
+	[item_date], 
+	[item_rootId],
+	[item_status],
+	[plan_budgetYear],
+	[item_procurementMethodDetails],
+	[item_isFromAssociationOfDisabled],
+	[item_type],
+	[item_procurementCategory],
+	[item_quantity],
+	[item_plannedMonth],
+	[item_isPreliminaryPlan],
+	[item_procurementMethodRationale],
+	[item_fundingSource],
+	[item_departmentalCode],
+	[item_projectAdministratorID],
+	[item_projectAdministratorName],
+	[item_parentId],
+    [plan_buyer_id],
+	[plan_buyer_name_ru],
+	[plan_buyer_name_kz],
+	[item_classification_scheme],
+	[item_classification_id],
+	[item_unit_scheme],
+	[item_unit_id],
+	[item_unit_name],
+	[item_unit_value_amount],
+	[item_unit_value_currency]
+FROM [$(TRN_QVD_PATH)Plan_Items.qvd] (qvd)
+where not exists (IDItemOrig);
+ENDIF;   
+    
+    
+Plan_Items:
+NoConcatenate
+LOAD [IDItemOrig],
+	[item_date], 
+	[item_rootId],
+	[item_status],
+	[plan_budgetYear],
+	[item_procurementMethodDetails],
+	[item_isFromAssociationOfDisabled],
+	[item_type],
+	[item_procurementCategory],
+	[item_quantity],
+	[item_plannedMonth],
+	[item_isPreliminaryPlan],
+	[item_procurementMethodRationale],
+	[item_fundingSource],
+	[item_departmentalCode],
+	[item_projectAdministratorID],
+	[item_projectAdministratorName],
+	[item_parentId],
+    [plan_buyer_id],
+	[plan_buyer_name_ru],
+	[plan_buyer_name_kz],
+	[item_classification_scheme],
+	[item_classification_id],
+	[item_unit_scheme],
+	[item_unit_id],
+	[item_unit_name],
+	[item_unit_value_amount],
+	[item_unit_value_currency]
+    ,AutoNumber(IDItemOrig, 'IDItem') AS IDItem
+Resident items;
+
+drop table items;
+    
+Store Plan_Items into [$(TRN_QVD_PATH)Plan_Items.qvd] (qvd);
+Drop table Plan_Items; 
+
+
+//====Plan Item Delivery addresses
+
+[deliveryAddresses]:
+LOAD	[countryName] AS [item_deliveryAddress_countryName],
+	[percentage] AS [item_deliveryAddress_percentage],
+	text([id_u3]) AS [item_deliveryAddress_id],
+	[locality] as [item_deliveryAddress_locality],
+	[__FK_deliveryAddresses] AS [__KEY_plans]
+RESIDENT RestConnectorMasterTable
+WHERE NOT IsNull([__FK_deliveryAddresses]);
+
+left join([deliveryAddresses])
+LOAD	[id_u4] as [IDItemOrig],
+	[id_u4] as [IDItem],
+	[__KEY_plans]
+RESIDENT RestConnectorMasterTable
+WHERE NOT IsNull([__FK_plans]);
+
+if NOT Isnull( FileSize('$(TRN_QVD_PATH)Plan_item_deliveryAddress.qvd')) THEN
+Concatenate (deliveryAddresses)
+load [item_deliveryAddress_countryName],
+	[item_deliveryAddress_percentage],
+	[item_deliveryAddress_id],
+	[item_deliveryAddress_locality],
+    [IDItemOrig]
+FROM [$(TRN_QVD_PATH)Plan_item_deliveryAddress.qvd] (qvd)
+where not exists (IDItem, IDItemOrig);
+ENDIF;
+
+Plan_item_deliveryAddress:
+NoConcatenate
+LOAD [item_deliveryAddress_countryName],
+	[item_deliveryAddress_percentage],
+	[item_deliveryAddress_id],
+	[item_deliveryAddress_locality],
+    [IDItemOrig]
+    ,AutoNumber(IDItemOrig, 'IDItem') AS IDItemKey
+Resident deliveryAddresses;
+
+drop table deliveryAddresses;
+
+Store Plan_item_deliveryAddress into [$(TRN_QVD_PATH)Plan_item_deliveryAddress.qvd] (qvd);
+Drop table Plan_item_deliveryAddress;
+
+
+//====Plan Item Budgets
+
+[budget]:
+LOAD	[project] AS [Item_budget_project],
+	text([projectID]) AS [Item_budget_projectID],
+	[subproject] AS [Item_budget_subproject],
+	text([subprojectID]) AS [Item_budget_subprojectID],
+	text([subsubprojectID]) AS [Item_budget_subsubprojectID],
+	[subsubprojectName] AS [Item_budget_subsubprojectName],
+	[__KEY_budget],
+	[__FK_budget] AS [__KEY_plans]
+RESIDENT RestConnectorMasterTable
+WHERE NOT IsNull([__FK_budget]);
+
+left join(budget)
+LOAD	[amount_u0] AS [item_budget_amount],
+	[prepaymentPercent] AS [item_budget_prepaymentPercent],
+	[currency_u0] AS [item_budget_currency],
+	$(vBoolConvert([valueAddedTaxIncluded])) AS [item_budget_valueAddedTaxIncluded],
+	[__FK_value_u0] AS [__KEY_budget]
+RESIDENT RestConnectorMasterTable
+WHERE NOT IsNull([__FK_value_u0]);
+
+left join([budget])
+LOAD	[id_u4] as [IDItemOrig],
+	[id_u4] as [IDItem],
+	[__KEY_plans]
+RESIDENT RestConnectorMasterTable
+WHERE NOT IsNull([__FK_plans]);
+
+if NOT Isnull( FileSize('$(TRN_QVD_PATH)Plan_item_budget.qvd')) THEN
+Concatenate (budget)
+load [Item_budget_project],
+	[Item_budget_projectID],
+	[Item_budget_subsubprojectID],
+	[Item_budget_subsubprojectName],
+	[Item_budget_subproject],
+	[Item_budget_subprojectID],
+    [item_budget_amount],
+	[item_budget_prepaymentPercent],
+	[item_budget_currency],
+	[item_budget_valueAddedTaxIncluded],
+    [IDItemOrig]
+FROM [$(TRN_QVD_PATH)Plan_item_budget.qvd] (qvd)
+where not exists (IDItem, IDItemOrig);
+ENDIF;
+
+Plan_item_budget:
+NoConcatenate
+Load [Item_budget_project],
+	[Item_budget_projectID],
+	[Item_budget_subsubprojectID],
+	[Item_budget_subsubprojectName],
+	[Item_budget_subproject],
+	[Item_budget_subprojectID],
+    [item_budget_amount],
+	[item_budget_prepaymentPercent],
+	[item_budget_currency],
+	[item_budget_valueAddedTaxIncluded],
+    [IDItemOrig]
+    ,AutoNumber(IDItemOrig, 'IDItem') AS IDItemKey
+Resident budget;
+
+drop table budget;
+
+Store Plan_item_budget into [$(TRN_QVD_PATH)Plan_item_budget.qvd] (qvd);
+Drop table Plan_item_budget; 
+
+
+
+////6. Offset Final
+
+
+OffsetTable:
+LOAD	[uri_u0] AS [uri]
+RESIDENT RestConnectorMasterTable
+WHERE NOT IsNull([__FK_next_page]);
+
+DROP TABLE RestConnectorMasterTable;
+
+IF NoOfRows('OffsetTable') > 0 THEN
+LET vURL = Peek('uri', -1, 'OffsetTable')&vBatchLimit_;
+ELSE
+
+Trace 'EMPTY OFFSET TABLE';
+drop tables OffsetTable, ADDOffsetTable;
+exit Script;
+ENDIF;
+Drop table OffsetTable;
+
+
+IF $(RowsQtyTenderHeaders) <> 0 THEN
+OffsetTable:
+load '$(vURL)' as uri
+AutoGenerate (1);
+
+Store OffsetTable into [$(DIC_QVD_PATH)OffsetTable.txt] (txt);
+Drop Table OffsetTable;
+ENDIF;
+
+Concatenate(ADDOffsetTable)
+load '$(vURL)' as offsetURI,
+	 Now() as loadTime
+AutoGenerate (1);
+
+Store ADDOffsetTable into [$(DIC_QVD_PATH)OffsetTableAll.txt]  (txt);
+DROP table ADDOffsetTable;
+
+LOOP WHILE $(RowsQtyTenderHeaders) > 0;
+
+
+////7. Exit script
+
+
+exit Script;

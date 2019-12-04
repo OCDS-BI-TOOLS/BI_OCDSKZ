@@ -1,0 +1,1613 @@
+////Main
+
+
+SET ThousandSep=' ';
+SET DecimalSep=',';
+SET MoneyThousandSep=' ';
+SET MoneyDecimalSep=',';
+SET MoneyFormat='# ##0,00 ₴;-# ##0,00 ₴';
+SET TimeFormat='hh:mm:ss';
+SET DateFormat='DD.MM.YYYY';
+SET TimestampFormat='DD.MM.YYYY hh:mm:ss[.fff]';
+SET FirstWeekDay=0;
+SET BrokenWeeks=1;
+SET ReferenceDay=0;
+SET FirstMonthOfYear=1;
+SET CollationLocale='uk-UA';
+SET CreateSearchIndexOnReload=1;
+SET MonthNames='січ.;лют.;бер.;квіт.;трав.;черв.;лип.;серп.;вер.;жовт.;лист.;груд.';
+SET LongMonthNames='січень;лютий;березень;квітень;травень;червень;липень;серпень;вересень;жовтень;листопад;грудень';
+SET DayNames='пн;вт;ср;чт;пт;сб;нд';
+SET LongDayNames='понеділок;вівторок;середа;четвер;пʼятниця;субота;неділя';
+SET NumericalAbbreviation='3:k;6:M;9:G;12:T;15:P;18:E;21:Z;24:Y;-3:m;-6:μ;-9:n;-12:p;-15:f;-18:a;-21:z;-24:y';
+SET HidePrefix = '_';
+
+SET DIC_QVD_PATH = 'lib://OCDSKZData/01_DataBase_Contracts/02_QVD_DB/01_Dictionary/';
+SET TRN_QVD_PATH = 'lib://OCDSKZData/01_DataBase_Contracts/02_QVD_DB/02_Transaction/';
+SET FILES_PATH = 'lib://OCDSKZData/01_DataBase_Contracts/01_DataFiles/';
+ SET DIC_QVD_PATH_TENDER = 'lib://OCDSKZData/01_DataBase/02_QVD_DB/01_Dictionary/';
+ SET TRN_QVD_PATH_TENDER = 'lib://OCDSKZData/01_DataBase/02_QVD_DB/02_Transaction/';
+
+
+Set vPrefix = '_';
+SET Lan1Name = 'Ru';
+SET Lan2Name = 'En';
+SET Lan3Name = 'Kz';
+
+
+
+
+////-1. Store dictionaries
+
+
+Multilang_Dictionaries:
+NoConcatenate
+LOAD
+    F1 as Index,
+    F2 as Reference,
+    F3 as Ru,
+    F4 as En,
+    F5 as Kz,
+    F6 as attributeOf
+FROM [lib://OCDSKZ_Web_dev]
+(html, utf8, embedded labels, table is @1, url is '***')
+where F1 <> 'Index' and len(F1)>0
+;
+
+
+store Multilang_Dictionaries into [$(DIC_QVD_PATH)/Multilang_Dictionaries.qvd] (qvd);
+Drop table Multilang_Dictionaries;
+
+Multilang_FieldNames:
+NoConcatenate
+LOAD
+    F1 as Index,
+    F2 as Reference,
+    F3 as Ru,
+    F4 as En,
+    F5 as Kz
+FROM [lib://OCDSKZ_Web_dev]
+(html, utf8, embedded labels, table is @1, url is '***')
+where F1 <> 'Index' and len(F1)>0
+;
+
+store Multilang_FieldNames into [$(DIC_QVD_PATH)/Multilang_FieldNames.qvd] (qvd);
+Drop table Multilang_FieldNames;
+
+
+Multilang_Labels:
+NoConcatenate
+LOAD
+    F1 as "Index",
+    F2 as Reference,
+    F3 as Ru,
+    F4 as En,
+    F5 as Kz
+FROM [lib://OCDSKZ_Web_dev]
+(html, utf8, embedded labels, table is @1, url is '***')
+where F1 <> 'Index' and len(F1)>0
+;
+
+store Multilang_Labels into [$(DIC_QVD_PATH)/Multilang_Labels.qvd] (qvd);
+Drop table Multilang_Labels;
+
+TranslationsHelp:
+LOAD 
+    F1 as "Index",
+    F2 as Reference,
+    F3 as Ru,
+    F4 as En,
+    F5 as Kz
+FROM [lib://OCDSKZ_Web_dev]
+(html, utf8, embedded labels, table is @1, url is '***')
+where F1 <> 'Index' and len(F1)>0
+;
+
+Store TranslationsHelp into [$(DIC_QVD_PATH)TranslationsHelp.qvd] (qvd);
+
+Drop Table TranslationsHelp;
+
+
+
+////0. Procedures
+
+
+
+//Procedures for translating fields
+
+SUB translationsJoin (tableName, keyField)
+
+  FieldNames_tmp:
+  NoConcatenate
+  Load 
+      "Index",
+      [$(Lan1Name)],
+      [$(Lan2Name)],
+      [$(Lan3Name)]
+  Resident FieldNamesTable
+  where Index like '$(tableName)';
+  
+  TRACE $(tableName);
+
+  Let vLan1FieldName = Peek('$(Lan1Name)', -1, 'FieldNames_tmp');
+  Let vLan2FieldName = Peek('$(Lan2Name)', -1, 'FieldNames_tmp');
+  Let vLan3FieldName = Peek('$(Lan3Name)', -1, 'FieldNames_tmp');
+
+  left join("$(tableName)")
+  Load Index as "$(keyField)",
+       [$(Lan1Name)] as "$(vLan1FieldName)",
+       [$(Lan2Name)] as "$(vLan2FieldName)",
+       [$(Lan3Name)] as "$(vLan3FieldName)"
+  Resident InnerDictionaries
+  where attributeOf like '$(tableName)';
+
+  drop table FieldNames_tmp;
+
+END SUB;
+
+
+SUB translationsNewTable (newTableName, existingTableName, keyField)
+// 0 - w/o KEEP
+  FieldNames_tmp:
+  NoConcatenate
+  Load 
+      "Index",
+      [$(Lan1Name)],
+      [$(Lan2Name)],
+      [$(Lan3Name)]
+  Resident FieldNamesTable
+  where Index like '$(newTableName)';
+  
+  TRACE $(tableName);
+
+  Let vLan1FieldName = Peek('$(Lan1Name)', -1, 'FieldNames_tmp');
+  Let vLan2FieldName = Peek('$(Lan2Name)', -1, 'FieldNames_tmp');
+  Let vLan3FieldName = Peek('$(Lan3Name)', -1, 'FieldNames_tmp');
+
+  IF existingTableName <> 0 THEN
+    [$(newTableName)]:
+    left keep("$(existingTableName)")
+    Load 
+        "Index" as [$(keyField)],
+        [$(Lan1Name)] as [$(vLan1FieldName)],
+        [$(Lan2Name)] as [$(vLan2FieldName)],
+        [$(Lan3Name)] as [$(vLan3FieldName)]
+    Resident InnerDictionaries
+    where attributeOf like '$(newTableName)';
+    
+    ELSEIF existingTableName = 0 THEN
+    	[$(newTableName)]:
+    	Load 
+            "Index" as [$(keyField)],
+            [$(Lan1Name)] as [$(vLan1FieldName)],
+            [$(Lan2Name)] as [$(vLan2FieldName)],
+            [$(Lan3Name)] as [$(vLan3FieldName)]
+    	Resident InnerDictionaries
+    	where attributeOf like '$(newTableName)';
+   ENDIF
+
+  drop table FieldNames_tmp;
+
+END SUB;
+
+SUB translationsJoinInners(tableName, keyField)
+
+  JoinTypes:
+  Load Distinct Reference as joinType
+  Resident InnerDictionaries
+  where attributeOf like '$(tableName)';
+
+  For each vJoinType in FieldValueList('joinType')
+
+    left join("$(tableName)")
+    LOAD Index as "$(keyField)",
+         [$(Lan1Name)] as "$(vPrefix)$(tableName)$(vJoinType)$(Lan1Name)",
+         [$(Lan2Name)] as "$(vPrefix)$(tableName)$(vJoinType)$(Lan2Name)",
+         [$(Lan3Name)] as "$(vPrefix)$(tableName)$(vJoinType)$(Lan3Name)"
+    Resident InnerDictionaries
+    where attributeOf like '$(tableName)'
+    and Reference like '$(vJoinType)';
+
+  next vJoinType;
+
+  drop table JoinTypes;
+
+END SUB;
+
+
+
+
+////1. Transactions
+
+
+Directory [$(TRN_QVD_PATH)];
+
+MapOrgCodes:
+MAPPING
+LOAD init_value,
+	 REPLACE(correct_value, '@', ' ') as correct_value 
+INLINE [
+init_value, correct_value
+BIN-, BIN@
+IIN-, IIN@
+];
+
+
+Contracts:
+LOAD
+    IDContractOrig,
+    contract_rootId,
+    contract_status,
+    contract_guaranteePercent,
+    contract_multiAnnual,
+    contract_dateSigned,
+    contract_treasuryRegistration,
+    contract_parentId,
+    contract_dateRegistered,
+    contract_tenderId,
+    contract_value_amount,
+    contract_value_currency,
+    contract_value_valueAddedTaxIncluded,
+    contract_period_startDate,
+    contract_period_endDate,
+    contract_period_durationInDays,
+    IDContract AS IDContractKey //Contract ID is not unique in contracting module, so the artificial key is used
+    ,
+    contract_procurementMethodDetails,
+    MapSubString('MapOrgCodes', IDbuyerOrig) AS IDbuyerOrig,
+    contract_buyer_name,
+    MapSubString('MapOrgCodes', IDsupplierOrig) AS IDsupplierOrig,
+    contract_supplier_name
+    ,
+    contract_buyer_name&' '&KeepChar(IDbuyerOrig, '0123456789') AS contract_buyer_name_code,
+    contract_supplier_name&' '&KeepChar(IDsupplierOrig, '0123456789') AS contract_supplier_name_code
+FROM [Contracts.qvd]
+(qvd);
+
+RENAME FIELDS 
+contract_procurementMethodDetails TO tender_procurementMethodDetails,
+IDsupplierOrig TO award_supplier_id,
+contract_supplier_name_code TO award_supplier_name,
+IDbuyerOrig TO lot_buyer_id,
+contract_buyer_name_code TO lot_buyer_name
+;
+
+Contract_Transactions:
+LOAD
+    IDContractOrig,
+    contract_transaction_id,
+    contract_transaction_date,
+    contract_transaction_payer,
+    contract_transaction_payee,
+    contract_transaction_value_amount,
+    contract_transaction_value_currency,
+    IDContractKey
+FROM [Contract_Transactions.qvd]
+(qvd);
+
+
+Contract_Items:
+LOAD
+    IDItemOrig,
+    item_quantity,
+    item_procurementMethodDetails,
+    item_isFromAssociationOfDisabled,
+    "type",
+    item_procurementCategory,
+    item_fundingSource,
+    item_departmentalCode,
+    item_projectAdministratorID,
+    item_projectAdministratorName,
+    item_procurementMethodRationale,
+    item_classification_scheme,
+    item_classification_id,
+    item_classification_description,
+    item_unit_scheme,
+    item_unit_id,
+    item_unit_name,
+    item_unit_value_amount,
+    item_unit_value_currency,
+    item_unit_value_valueAddedTaxIncluded,
+    IDContractKey,
+    IDItem as IDItemKey,
+    IDItemOrig&'|'&IDContractOrig AS _IDItemOrig,
+    Autonumber(IDItemOrig&'|'&IDContractOrig, 'IDItemOrigUnique') AS _IDItemKey
+FROM [Contract_Items.qvd]
+(qvd);
+
+Contract_Rationale:
+LOAD
+    contract_rationale,
+    IDContractKey
+FROM [Contract_Rationale.qvd]
+(qvd);
+
+DROP FIELD IDItemOrig;
+RENAME FIELDS _IDItemOrig TO IDItemOrig;
+DROP FIELD IDItemKey;
+RENAME FIELDS _IDItemKey TO IDItemKey;
+
+
+////4. For KPIs
+
+
+
+// // The Contract Table is grouped to the rootId level
+
+//Date of contract signed
+rename field contract_dateSigned to contract_dateTimeSigned;
+
+left join(Contracts)
+Load IDContractKey,
+	 Date(Floor(contract_dateTimeSigned)) as contract_dateSigned
+Resident Contracts;
+
+LEFT JOIN(Contract_Items)
+LOAD IDContractKey,
+	 contract_rootId,
+     contract_dateTimeSigned
+RESIDENT Contracts;
+
+LEFT JOIN(Contract_Transactions)
+LOAD IDContractKey,
+	 contract_rootId,
+     contract_dateTimeSigned,
+     contract_status
+RESIDENT Contracts;
+
+LEFT JOIN(Contract_Rationale)
+LOAD IDContractKey,
+	 contract_rootId
+RESIDENT Contracts;
+
+
+RENAME TABLE Contracts TO Contracts_;
+
+Contracts_flag:
+NOCONCATENATE
+LOAD     
+    "contract_rootId",
+    "contract_status",
+    "contract_guaranteePercent",
+    "contract_multiAnnual",
+    "contract_dateSigned",
+    "contract_dateTimeSigned",
+    "contract_treasuryRegistration",
+    "contract_parentId",
+    "contract_dateRegistered",
+    "contract_tenderId",
+    "contract_value_amount",
+    "contract_value_currency",
+    "contract_value_valueAddedTaxIncluded",
+    "contract_period_startDate",
+    "contract_period_endDate",
+    "contract_period_durationInDays",
+    "IDContractKey"
+    ,
+    "tender_procurementMethodDetails",
+    "lot_buyer_id",
+    "lot_buyer_name",
+    "award_supplier_id",
+    "award_supplier_name"
+    ,
+    if(previous(contract_rootId) <> contract_rootId, 1) AS distinctContractFlag
+RESIDENT Contracts_
+ORDER BY contract_rootId, contract_dateTimeSigned DESC
+;
+
+Contracts:
+NoConcatenate
+LOAD     "contract_rootId",
+    "contract_status",
+    "contract_guaranteePercent",
+    "contract_multiAnnual",
+    "contract_dateSigned",
+    "contract_dateTimeSigned",
+    "contract_treasuryRegistration",
+    "contract_parentId",
+    "contract_dateRegistered",
+    "contract_tenderId",
+    "contract_value_amount",
+    "contract_value_currency",
+    "contract_value_valueAddedTaxIncluded",
+    "contract_period_startDate",
+    "contract_period_endDate",
+    "contract_period_durationInDays",
+    "IDContractKey"
+    ,
+    "tender_procurementMethodDetails",
+    "lot_buyer_id",
+    "lot_buyer_name",
+    "award_supplier_id",
+    "award_supplier_name"
+RESIDENT Contracts_flag
+WHERE distinctContractFlag = 1;
+
+DROP TABLE Contracts_flag;
+
+
+LEFT JOIN(Contracts) //for debug
+LOAD contract_rootId,
+	 COUNT(DISTINCT IDContractOrig) AS NoOfAdditionalContracts_
+RESIDENT Contracts_
+WHERE IDContractOrig <> contract_rootId
+GROUP BY contract_rootId
+;
+
+DROP TABLE Contracts_;
+
+//adding payment KPI to the Contracts table
+LEFT JOIN(Contracts)
+LOAD contract_rootId,
+	 SUM(contract_transaction_value_amount) AS contract_transactionsValue,
+     ROUND(FLOOR(AVG(contract_transaction_value_amount), 0.001), 0.01) AS contract_transactionsValue_avg,
+     COUNT(DISTINCT contract_transaction_id) AS contract_transactionsCount
+RESIDENT Contract_Transactions
+WHERE WILDMATCH(contract_status, 'pending', 'active', 'complete', 'terminated', 'partiallyComplete', 'undefined') 
+GROUP BY contract_rootId
+;
+
+DROP TABLE Contract_Transactions;
+
+RENAME FIELD contract_status TO contract_status_;
+RENAME FIELD contract_transactionsCount TO contract_transactionsCount_;
+
+LEFT JOIN(Contracts)
+LOAD contract_rootId,
+	 IF(LEN(contract_status_)<1, NULL(),
+     	IF(contract_status_ <> 'complete' OR contract_transactionsValue=contract_value_amount, contract_status_,	
+        	IF(ALT(contract_transactionsValue, 0)<contract_value_amount, 
+     			'partiallyComplete', 'undefined'))) AS contract_status
+     ,ALT(NoOfAdditionalContracts_, 0) AS NoOfAdditionalContracts
+     ,ALT(contract_transactionsCount_, 0) AS contract_transactionsCount
+RESIDENT Contracts;
+
+DROP FIELDS contract_status_ FROM Contracts;
+DROP FIELD NoOfAdditionalContracts_ FROM Contracts;
+DROP FIELD contract_transactionsCount_ FROM Contracts;
+
+
+//Contract is used into calculation (the contract is last in the root chain)
+left join(Contracts)
+Load contract_rootId,
+	 1 as contract_valid_for_calculations_
+Resident Contracts
+where WildMatch(contract_status, 'pending', 'active', 'complete', 'terminated', 'partiallyComplete', 'cancelled', 'undefined')
+;
+
+left join(Contracts)
+Load contract_rootId,
+	 1 as transaction_valid_for_calculations_
+Resident Contracts
+where WildMatch(contract_status, 'pending', 'active', 'complete', 'terminated', 'partiallyComplete', 'undefined')
+;
+
+left join(Contracts)
+Load contract_rootId,
+	 Alt(contract_valid_for_calculations_, 0) as contract_valid_for_calculations,
+     Alt(transaction_valid_for_calculations_, 0) as transaction_valid_for_calculations
+Resident Contracts;
+
+drop field contract_valid_for_calculations_ from Contracts;
+
+//Adding root-contract field
+rename field contract_status to contract_status_basic;
+
+
+
+LEFT JOIN(Contracts)
+LOAD contract_rootId,
+	 contract_status_basic AS contract_status
+RESIDENT Contracts
+WHERE NOT WILDMATCH(contract_status_basic, 'changed', 'delegated')
+;
+
+
+//Item is related to the last contract in rootId chain
+LEFT JOIN(Contract_Items)
+LOAD IDContractKey,
+	 1 AS lastContractInChain
+RESIDENT Contracts;
+
+RENAME TABLE Contract_Items TO Contract_Items_;
+
+Contract_Items:
+NOCONCATENATE
+LOAD IDItemKey,
+    item_procurementCategory,
+    item_classification_id,
+	contract_rootId
+RESIDENT Contract_Items_
+WHERE lastContractInChain=1
+;
+
+DROP TABLE Contract_Items_;
+
+LEFT JOIN(Contracts)
+LOAD contract_rootId,
+	 contract_rootId AS _contract_rootId
+RESIDENT Contracts;
+
+
+
+////4.5 ProcurementDictionary
+
+
+
+
+Let vTrace = NoOfRows('Contract_Items');
+Trace No. of Items at begining  = $(vTrace);
+
+//GSW and ENSTRU classification
+left join(Contract_Items)
+Load 
+	 IDItemKey,
+	 left(item_classification_id, 2)
+     &'.'&mid(item_classification_id, 3, 2)
+     &'.'&mid(item_classification_id, 5, 2)
+     &mid(item_classification_id, 7, 4)
+     &right(item_classification_id, 7) as item_classification_id_dotted  
+Resident Contract_Items
+where WildMatch(item_classification_id, '??????.???.??????');
+
+Let vTrace = NoOfRows('Contract_Items');
+Trace Quantity after adding UNSTRU codes  = $(vTrace);
+
+left join(Contract_Items)
+Load //IDItemOrig,
+	 IDItemKey,
+	 if(not IsNull(item_classification_id_dotted), item_classification_id_dotted, item_classification_id) as item_classification_id_mod
+Resident Contract_Items;
+
+
+drop field item_classification_id_dotted;
+
+//New script (v2) to load ENSTRU classification
+
+RENAME TABLE Contract_Items TO Contract_Items_;
+
+Contract_Items:
+NoConcatenate
+LOAD IDItemKey,
+	 contract_rootId,
+	 left(item_classification_id_mod, 12) as 12,
+     left(item_classification_id_mod, 8) AS 8,
+     left(item_classification_id_mod, 5) AS 5,
+     left(item_classification_id_mod, 2) AS 2,
+     item_procurementCategory,
+     item_classification_id,
+     ROWNO() AS recordNumber
+Resident Contract_Items_
+ORDER BY contract_rootId, item_classification_id
+;
+
+DROP TABLE Contract_Items_;
+
+RENAME TABLE Contract_Items TO Contract_Items_;
+
+Contract_Items:
+NoConcatenate
+LOAD IDItemKey,
+	 contract_rootId,
+	 "12",
+     "8",
+     "5",
+     "2",
+     item_procurementCategory,
+     item_classification_id,
+     recordNumber
+     ,
+	 IF(Previous(contract_rootId) <> contract_rootId, 1) AS startRootFlag,
+     IF(PREVIOUS(contract_rootId) <> contract_rootId, 1, IF(Previous(item_procurementCategory) = item_procurementCategory, 1)) AS sameProcurementCategoryFlag,
+     IF(PREVIOUS(contract_rootId) <> contract_rootId, 1, IF(Previous("12") = "12", 1)) AS same12,
+     IF(PREVIOUS(contract_rootId) <> contract_rootId, 1, IF(Previous("8") = "8", 1)) AS same8,
+     IF(PREVIOUS(contract_rootId) <> contract_rootId, 1, IF(Previous("5") = "5", 1)) AS same5,
+     IF(PREVIOUS(contract_rootId) <> contract_rootId, 1, IF(Previous("2") = "2", 1)) AS same2,
+     IF(PREVIOUS(contract_rootId) <> contract_rootId, 1, IF(Previous("item_classification_id") = "item_classification_id", 1)) AS same_item_classification_id
+Resident Contract_Items_;
+
+DROP TABLE Contract_Items_;
+
+
+T:
+NoConcatenate
+Load DISTINCT 	 contract_rootId,
+	 "12",
+     "8",
+     "5",
+     "2",
+     item_procurementCategory,
+     item_classification_id
+Resident Contract_Items
+WHERE startRootFlag=1
+;
+
+LEFT JOIN(T)
+LOAD contract_rootId,
+	 1 AS SC
+RESIDENT Contract_Items
+WHERE same_item_classification_id = 1
+;
+
+LEFT JOIN(T)
+LOAD contract_rootId,
+	 1 as noSC
+RESIDENT Contract_Items
+WHERE same_item_classification_id <> 1
+;
+
+
+
+TFinale:
+NoConcatenate
+LOAD contract_rootId,
+	 contract_rootId AS contract_rootId_reff,
+	 "12",
+     "8",
+     "5",
+     "2",
+     item_procurementCategory,
+     item_classification_id
+RESIDENT T
+WHERE SC=1 AND noSC<>1
+;
+
+DROP TABLE T;
+
+LET vTrace = NoOfRows('TFinale');
+TRACE Roots with same CODE = $(vTrace);
+
+//12 chars deep
+
+T:
+NoConcatenate
+Load DISTINCT contract_rootId,
+	 "12",
+     "8",
+     "5",
+     "2",
+     item_procurementCategory,
+     item_classification_id
+Resident Contract_Items
+WHERE NOT EXISTS(contract_rootId_reff, contract_rootId)
+AND startRootFlag=1
+;
+
+LEFT JOIN(T)
+LOAD contract_rootId,
+	 1 AS S12
+RESIDENT Contract_Items
+WHERE same12 = 1
+;
+
+LEFT JOIN(T)
+LOAD contract_rootId,
+	 1 as noS12
+RESIDENT Contract_Items
+WHERE same12 <> 1
+;
+
+//TFinale:
+CONCATENATE(TFinale)
+LOAD contract_rootId,
+	 contract_rootId AS contract_rootId_reff,
+	 "12",
+     "8",
+     "5",
+     "2",
+     item_procurementCategory,
+     'mixed '&item_procurementCategory AS item_classification_id
+RESIDENT T
+WHERE S12=1 AND noS12<>1
+;
+
+DROP TABLE T;
+
+LET vTrace = NoOfRows('TFinale');
+TRACE Roots with same LEVEL12 = $(vTrace);
+
+//8 chars deep
+
+T:
+NoConcatenate
+Load DISTINCT contract_rootId,
+	 "12",
+     "8",
+     "5",
+     "2",
+     item_procurementCategory,
+     item_classification_id
+Resident Contract_Items
+WHERE NOT EXISTS(contract_rootId_reff, contract_rootId)
+AND startRootFlag=1
+;
+
+LEFT JOIN(T)
+LOAD contract_rootId,
+	 1 AS S8
+RESIDENT Contract_Items
+WHERE same8 = 1
+;
+
+LEFT JOIN(T)
+LOAD contract_rootId,
+	 1 as noS8
+RESIDENT Contract_Items
+WHERE same8 <> 1
+;
+
+//TFinale:
+CONCATENATE(TFinale)
+LOAD contract_rootId,
+	 contract_rootId AS contract_rootId_reff,
+	 "2",
+     "8",
+     "5",
+     'mixed '&item_procurementCategory AS "12",
+     item_procurementCategory,
+     'mixed '&item_procurementCategory AS item_classification_id
+RESIDENT T
+WHERE S8=1 AND noS8<>1
+;
+
+DROP TABLE T;
+
+LET vTrace = NoOfRows('TFinale');
+TRACE Roots with same LEVEL 8 = $(vTrace);
+
+
+//5 chars deep
+
+T:
+NoConcatenate
+Load DISTINCT contract_rootId,
+	 "12",
+     "8",
+     "5",
+     "2",
+     item_procurementCategory,
+     item_classification_id
+Resident Contract_Items
+WHERE NOT EXISTS(contract_rootId_reff, contract_rootId)
+AND startRootFlag=1
+;
+
+LEFT JOIN(T)
+LOAD contract_rootId,
+	 1 AS S5
+RESIDENT Contract_Items
+WHERE same5 = 1
+;
+
+LEFT JOIN(T)
+LOAD contract_rootId,
+	 1 as noS5
+RESIDENT Contract_Items
+WHERE same5 <> 1
+;
+
+//TFinale:
+CONCATENATE(TFinale)
+LOAD contract_rootId,
+	 contract_rootId AS contract_rootId_reff,
+	 "2",
+     "5",
+     'mixed '&item_procurementCategory AS "8",
+     'mixed '&item_procurementCategory AS "12",
+     item_procurementCategory,
+     'mixed '&item_procurementCategory AS item_classification_id
+RESIDENT T
+WHERE S5=1 AND noS5<>1
+;
+
+DROP TABLE T;
+
+LET vTrace = NoOfRows('TFinale');
+TRACE Roots with same LEVEL 5 = $(vTrace);
+
+
+//2 chars deep
+
+T:
+NoConcatenate
+Load DISTINCT contract_rootId,
+	 "12",
+     "8",
+     "5",
+     "2",
+     item_procurementCategory,
+     item_classification_id
+Resident Contract_Items
+WHERE NOT EXISTS(contract_rootId_reff, contract_rootId)
+AND startRootFlag=1
+;
+
+LEFT JOIN(T)
+LOAD contract_rootId,
+	 1 AS S2
+RESIDENT Contract_Items
+WHERE same2 = 1
+;
+
+LEFT JOIN(T)
+LOAD contract_rootId,
+	 1 as noS2
+RESIDENT Contract_Items
+WHERE same2 <> 1
+;
+
+//TFinale:
+CONCATENATE(TFinale)
+LOAD contract_rootId,
+	 contract_rootId AS contract_rootId_reff,
+	 "2",
+     'mixed '&item_procurementCategory AS "5",
+     'mixed '&item_procurementCategory AS "8",
+     'mixed '&item_procurementCategory AS "12",
+     item_procurementCategory,
+     'mixed '&item_procurementCategory AS item_classification_id
+RESIDENT T
+WHERE S2=1 AND noS2<>1
+;
+
+DROP TABLE T;
+
+
+LET vTrace = NoOfRows('TFinale');
+TRACE Roots with same LEVEL 2 = $(vTrace);
+
+
+//proc category deep
+
+T:
+NoConcatenate
+Load DISTINCT contract_rootId,
+	 "12",
+     "8",
+     "5",
+     "2",
+     item_procurementCategory,
+     item_classification_id
+Resident Contract_Items
+WHERE NOT EXISTS(contract_rootId_reff, contract_rootId)
+AND startRootFlag=1
+;
+
+LEFT JOIN(T)
+LOAD contract_rootId,
+	 1 AS SP
+RESIDENT Contract_Items
+WHERE sameProcurementCategoryFlag = 1
+;
+
+LEFT JOIN(T)
+LOAD contract_rootId,
+	 1 as noSP
+RESIDENT Contract_Items
+WHERE sameProcurementCategoryFlag <> 1
+;
+
+//TFinale:
+CONCATENATE(TFinale)
+LOAD contract_rootId,
+	 contract_rootId AS contract_rootId_reff,
+	 'mixed '&item_procurementCategory AS "2",
+     'mixed '&item_procurementCategory AS "5",
+     'mixed '&item_procurementCategory AS "8",
+     'mixed '&item_procurementCategory AS "12",
+     item_procurementCategory,
+     'mixed '&item_procurementCategory AS item_classification_id
+RESIDENT T
+WHERE SP=1 AND noSP<>1
+;
+
+DROP TABLE T;
+
+
+LET vTrace = NoOfRows('TFinale');
+TRACE Roots with same LEVEL 2 = $(vTrace);
+
+//only mixed goods left
+
+CONCATENATE(TFinale)
+LOAD contract_rootId,
+	 contract_rootId AS contract_rootId_reff,
+	 'mixed'AS "2",
+     'mixed'AS "5",
+     'mixed'AS "8",
+     'mixed'AS "12",
+     'mixed'AS item_procurementCategory,
+     'mixed'AS item_classification_id
+RESIDENT Contract_Items
+WHERE NOT EXISTS(contract_rootId_reff, contract_rootId)
+AND startRootFlag=1
+;
+
+
+DROP TABLE Contract_Items;
+
+LET vTrace = NoOfRows('TFinale');
+TRACE TOTAL ROOTS = $(vTrace);
+
+LEFT JOIN(Contracts)
+LOAD contract_rootId,
+item_classification_id AS contract_classification_id,
+"12" AS contract_classification_vedomstvo,
+"8" AS contract_classification_group,
+"5" AS contract_classification_subclass,
+"2" AS contract_classification_class
+RESIDENT TFinale;
+
+
+//END OF THE NEW SCRIPT;
+
+
+rename fields 	contract_classification_class to Class,
+				contract_classification_subclass to SubClass,
+                contract_classification_group to Group,
+                contract_classification_vedomstvo to Vedomstvo,
+                contract_classification_id to code
+            	;
+
+left join(Contracts)
+Load IDContractKey,
+	 AutoNumber(Class
+     &SubClass
+     &Group
+     &Vedomstvo
+     &code
+     ,'ENSTRUHierarchy') as FullEnstruHierarchyCode
+Resident Contracts;
+
+ContractsENSTRUHierarchy:
+NoConcatenate
+Load Distinct FullEnstruHierarchyCode,
+	 Class,
+     SubClass,
+     Group,
+     Vedomstvo,
+     code
+Resident Contracts;
+
+//Adding levels names
+Directory [$(DIC_QVD_PATH_TENDER)];
+
+ProcurementDictionary:
+LOAD
+    text(parent_id) as parent_id,
+    name_kz,
+    level_,
+    text(id) as id,
+    name_ru,
+    "r",
+    g,
+    text(code) as code,
+    s
+    ,edizm
+FROM [ProcurementDictionary.qvd]
+(qvd)
+;
+
+
+//Note: the whole dictionary is loaded to add correctly parent flag
+
+//Adding codes names
+left join(ContractsENSTRUHierarchy)
+Load code,
+	 name_ru as code_nameRu,
+     name_kz as code_nameKz
+     ,edizm
+Resident ProcurementDictionary
+where WildMatch(code,
+'??.??.??.???.???.??.????.????????????',
+'??????.???.??????')
+;
+
+left join(ContractsENSTRUHierarchy)
+Load code as Vedomstvo,
+	 name_ru as Vedomstvo_nameRu,
+     name_kz as Vedomstvo_nameKz
+Resident ProcurementDictionary
+where WildMatch(code,
+'??.??.??.???')
+;
+
+//names (name_ru) are multiplying (as code ??.??.?? can relate to both old and new dictionaries)
+
+//ChildNode flag to choose correct name
+left join(ProcurementDictionary)
+Load distinct parent_id as id,
+	 1 as isParent_flag
+Resident ProcurementDictionary
+;
+
+left join(ContractsENSTRUHierarchy)
+Load code as Group,
+	 name_ru as Group_nameRu,
+     name_kz as Group_nameKz
+Resident ProcurementDictionary
+where WildMatch(code,
+'??.??.??')
+and isParent_flag = 1
+;
+
+left join(ContractsENSTRUHierarchy)
+Load text(
+     	if(len(code) = 4, 
+     		code&'0',
+        		left(code, 5))) as SubClass, //оhandling case when code looks like ??.?
+	 name_ru as SubClass_nameRu,
+     name_kz as SubClass_nameKz
+Resident ProcurementDictionary
+Where 
+WildMatch(level_, 4)
+;
+
+
+left join(ContractsENSTRUHierarchy)
+Load left(code, 2) as Class,
+	 name_ru as Class_nameRu,
+     name_kz as Class_nameKz
+Resident ProcurementDictionary
+where 
+level_ = 2
+;
+
+
+
+drop table ProcurementDictionary;
+
+drop field 	Class,
+			SubClass,
+            Group,
+            Vedomstvo,
+            code from Contracts;
+
+Left join(ContractsENSTRUHierarchy)
+Load FullEnstruHierarchyCode
+	 ,Class&if(not IsNull(Class_nameRu), ' - '&Class_nameRu) as Class_codeNameRu
+     ,SubClass&if(not IsNull(SubClass_nameRu), ' - '&SubClass_nameRu) as SubClass_codeNameRu
+     ,Group&if(not IsNull(Group_nameRu), ' - '&Group_nameRu) as Group_codeNameRu
+     ,Vedomstvo&if(not IsNull(Vedomstvo_nameRu), ' - '&Vedomstvo_nameRu) as Vedomstvo_codeNameRu
+     ,code&if(not IsNull(code_nameRu), ' - '&code_nameRu) as code_codeNameRu
+     ,Class&if(not IsNull(Class_nameKz), ' - '&Class_nameKz) as Class_codeNameKz
+     ,SubClass&if(not IsNull(SubClass_nameKz), ' - '&SubClass_nameKz) as SubClass_codeNameKz
+     ,Group&if(not IsNull(Group_nameKz), ' - '&Group_nameKz) as Group_codeNameKz
+     ,Vedomstvo&if(not IsNull(Vedomstvo_nameKz), ' - '&Vedomstvo_nameKz) as Vedomstvo_codeNameKz
+     ,code&if(not IsNull(code_nameKz), ' - '&code_nameKz) as code_codeNameKz
+Resident ContractsENSTRUHierarchy;
+
+drop fields code_nameRu,
+			Vedomstvo_nameRu,
+            Group_nameRu,
+            SubClass_nameRu,
+            Class_nameRu,
+            code_nameKz,
+			Vedomstvo_nameKz,
+            Group_nameKz,
+            SubClass_nameKz,
+            Class_nameKz;
+
+
+
+////4.9 Calendar
+
+
+
+// Contract Dates period
+MinMaxDates:
+LOAD 
+	Min(contract_dateSignedTmp) as MinDate,
+	Max(contract_dateSignedTmp) as MaxDate;	
+
+LOAD Num(Fieldvalue('contract_dateSigned',RecNo())) as contract_dateSignedTmp 
+       AUTOGENERATE FieldValueCount('contract_dateSigned'); 
+
+LET vMinDate = Date(Peek('MinDate', -1, 'MinMaxDates'));
+LET vMaxDate = Date(Peek('MaxDate', -1, 'MinMaxDates'));
+
+DROP TABLE MinMaxDates;
+
+//	Adding multilanguage names for months
+
+SET MonthNames='$(_T_54_Ru)';
+let vMonthNames = '''' & MonthNames & '''';
+Trace System variable MonthNames Ru = $(vMonthNames);
+
+FullCalendar:
+Load
+	 "contract_dateSigned",
+     "contract_dateSigned" as Date
+     ,Dual(Year(contract_dateSigned)&'-'&Month(contract_dateSigned), (Year(contract_dateSigned)-1) * 12 + Month(contract_dateSigned)) as [Год-Месяц]
+     ,Dual(Year(contract_dateSigned), YearStart(contract_dateSigned)) AS [Год]
+;
+LOAD Date('$(vMinDate)' + RecNo() - 1) as "contract_dateSigned"
+AutoGenerate vMaxDate - vMinDate + 1;    
+
+SET MonthNames='$(_T_54_En)';
+let vMonthNames = '''' & MonthNames & '''';
+Trace System variable MonthNames En = $(vMonthNames);
+
+Left Join (FullCalendar)
+Load
+	 Date,
+     Dual(Year(contract_dateSigned)&'-'&Month(contract_dateSigned), (Year(contract_dateSigned)-1) * 12 + Month(contract_dateSigned)) as [Year-Month]
+Resident FullCalendar;
+
+SET MonthNames='$(_T_54_Kz)';
+let vMonthNames = '''' & MonthNames & '''';
+Trace System variable MonthNames Kz = $(vMonthNames);
+
+Left Join (FullCalendar)
+Load
+	 Date,
+     Dual(Year(contract_dateSigned)&'-'&Month(contract_dateSigned), (Year(contract_dateSigned)-1) * 12 + Month(contract_dateSigned)) as [Жылы- айы]
+Resident FullCalendar;     
+
+
+
+////5. Variables
+
+
+
+//==Fields==
+SET vContractId = 'IDContractOrig';
+SET vContractRoot = 'contract_rootId';
+SET vContractStatus = 'contract_status';
+SET vContractMultiannual = 'contract_multiAnnual';
+SET vContractTreasuryRegistration = 'contract_treasuryRegistration';
+SET vContractRationale = 'contract_rationale';
+SET vContractValue = 'contract_value_amount';
+SET vContractDateSigned = 'contract_dateSigned';
+SET vContractGuarantee = 'contract_guarantee';
+SET vContractProcurementMethod = ''; //from tenders
+SET vContractEnstruClass = ''; 
+SET vContractEnstruSubclass = '';
+SET vContractEnstruGroup = '';
+SET vContractEnstruFull = 'contract_classification_id';
+
+SET vTransactionId = 'contract_transaction_id';
+SET vTransactionValue = 'contract_transactionsValue';
+SET vTransactionDate = 'contract_transaction_date';
+SET vTransactionsPerContractsSum = 'contract_transactionsCount';
+SET vTransactionsPerContractsAvg = 'contract_transactionsCount_avg';
+SET vTransactionValueAvg = 'contract_transactionsValue_avg';
+
+SET vContractEnstruClass = =replace('[@(=@(T(19)))]', '@', '$');
+SET vContractEnstruSubclass = =replace('[@(=@(T(20)))]', '@', '$');
+SET vContractEnstruGroup = =replace('[@(=@(T(21)))]', '@', '$');
+SET vContractEnstruVedomstvo = =replace('[@(=@(T(22)))]', '@', '$');
+SET vContractEnstruFull = =replace('[@(=@(T(23)))]', '@', '$');
+
+SET vContractProcurementMethod = 'tender_procurementMethodDetails';
+
+SET vBuyerName = =replace('[@(=@(T(34)))]', '@', '$');		
+SET vBuyerId = 'lot_buyer_id';								
+SET vSupplierName = =replace('[@(=@(T(37)))]', '@', '$');	
+SET vSupplierId	 = 'award_supplier_id';						
+
+//Additional Vars
+SET vStatusFlagField = 'contract_valid_for_calculations';
+SET vStatusFlagFieldTrans = 'transaction_valid_for_calculations';
+SET vAddContractsFlagField = 'contract_isAdditional';
+//Remapping
+SET vContractId = '[Код договора]';
+SET vContractRoot = '_contract_rootId';
+SET vTransactionId = '[Код платежа]';
+SET vTransactionValue = '[Сумма платежей по договору]';
+SET vContractValue = '[Сумма договора]';
+SET vContractGuarantee = '[Сумма обеспечения договора]';
+SET vContractChanges = 'NoOfAdditionalContracts';
+
+
+
+//==Attributes==
+SET vStatusInclude = '$(vStatusFlagField)={1}';
+SET vStatusIncludeTrans = '$(vStatusFlagFieldTrans)={1}';
+SET vAdditionalContractFlag = '$(vAddContractsFlagField)={1}';
+SET vInitialContractFlag = '';
+
+SET vNotRootContr = '$(vContractId)-={$(vContractRoot)}';
+
+
+//==KPIs==
+SET PARAMS = (=replace('$1', ';', ',')); 
+
+
+SET _CONTRACTS_COUNT_ = 'COUNT({<$(vStatusInclude)>*<$'&PARAMS&'>} Distinct $(vContractRoot)'&')';
+LET vContractsCount = $(_CONTRACTS_COUNT_);																	// 	Number of contracts
+
+SET _CONTRACT_AMOUNT_ = 'SUM({<$(vStatusInclude)>*<$'&PARAMS&'>} $(vContractValue)'&')';
+LET vContractAmount = $(_CONTRACT_AMOUNT_);																	//	Sum of contracts value
+
+SET _TRANSACTION_AMOUNT_ = 'SUM({<$(vStatusIncludeTrans)>*<$'&PARAMS&'>} $(vTransactionValue)'&')';
+LET	vTransactionAmount = $(_TRANSACTION_AMOUNT_);															//	Sum of payments
+
+SET _TRANSACTION_COUNT_ = 'SUM({<$(vStatusIncludeTrans)>*<$'&PARAMS&'>} $(vTransactionsPerContractsSum)'&')';
+LET vTransactionCount = $(_TRANSACTION_COUNT_);																// 	Number of payments
+
+SET _AVG_TRANS_COUNT_ = 'AVG({<$(vStatusIncludeTrans)>*<$'&PARAMS&'>} $(vTransactionsPerContractsSum)'&')';
+LET vAvgTransCount = $(_AVG_TRANS_COUNT_);																	// 	Avg number of payments in a contract
+
+SET _AVG_TRANS_AMOUNT_ = 'AVG({<$(vStatusIncludeTrans)>*<$'&PARAMS&'>} $(vTransactionValueAvg)'&')';
+LET vAvgTransAmount = $(_AVG_TRANS_AMOUNT_);																// 	Avg value of payment
+
+SET _IMPL1_ = 'SUM({<$(vStatusIncludeTrans)>*<$'&PARAMS&'>} $(vTransactionValue)'&')';
+SET _IMPL2_ = 'SUM({<$(vStatusIncludeTrans)>*<$'&PARAMS&'>} $(vContractValue)'&')';
+LET v%Implementation =  'Num(RangeSum('&$(_IMPL1_)&'/'&$(_IMPL2_)&', 0), ''# ##0,00%'')';					// 	implementation %
+
+
+SET _CHANGES_COUNT_ = 'SUM({<$'&PARAMS&'>} $(vContractChanges)'&')';
+LET vChangesCount = $(_CHANGES_COUNT_);																		// 	Number of contract changes
+
+SET _AVG_CHANGE_COUNT_ = 'AVG({<$'&PARAMS&'>} $(vContractChanges)'&')';
+LET vAvgChangesCount = $(_AVG_CHANGE_COUNT_);																// 	Avg number of contract changes per contract
+
+SET _GUARANTEE_AMOUNT_ = 'SUM({<$(vStatusInclude)>*<$'&PARAMS&'>} $(vContractGuarantee)'&')';
+LET vGuaranteeAmount = $(_GUARANTEE_AMOUNT_);																//	Sum of contract guarantee
+
+
+
+////5.5 Multilang
+
+
+
+//====Multilang dictionaries field names
+FieldNamesTable:
+NoConcatenate
+LOAD
+    "Index",
+    Reference,
+    Ru,
+    En,
+    Kz
+FROM [$(DIC_QVD_PATH)//Multilang_FieldNames.qvd]
+(qvd);
+
+//Inner dictionaries field names
+InnerDictionaries:
+NoConcatenate
+LOAD
+    "Index",
+    Reference,
+    Ru,
+    En,
+    Kz,
+    attributeOf
+FROM [$(DIC_QVD_PATH)//Multilang_Dictionaries.qvd]
+(qvd);
+
+set Verbatim = 1;
+//Multilang interface 
+Translations:
+NoConcatenate
+load     "Index",
+    Reference,
+    Ru,
+    En,
+    Kz
+From [$(DIC_QVD_PATH)Multilang_Labels.qvd] (qvd);
+
+Language:
+CROSSTABLE (Language, Translation) LOAD 
+	 Index, 
+     Ru,
+     En,
+     Kz
+RESIDENT Translations;
+
+LanguageList:
+LOAD Distinct
+	 Language as _Language
+RESIDENT Language
+WHERE Language > 0;
+
+left join(LanguageList)
+LOAD
+    Index as [_Language],
+    Ru as [Index_]
+Resident InnerDictionaries
+where attributeOf like 'LanguageList'
+;
+
+DROP TABLE Translations;
+
+// Var for multilang interface
+LET T = replace('_T_$1_@(=FirstSortedValue(distinct _Language, Index_))', '@', '$');
+
+LET vTranslationsRows = NoOfRows('Language');
+
+FOR i = 0 TO vTranslationsRows - 1 
+	LET _vTranslationId = Peek('Index', i, 'Language');
+	LET _vTranslation = Peek('Translation', i, 'Language');
+	LET _vTrLanguage = Peek('Language', i, 'Language');
+	
+	LET _vTrName = '_T_$(_vTranslationId)_$(_vTrLanguage)';
+	LET $(_vTrName) = '$(_vTranslation)';
+	
+//	TRACE $(_vTrName);
+
+	LET _vTranslationId =;
+	LET _vTranslation =;
+	LET _vTrLanguage =;
+	LET _vTrName =;
+NEXT;
+
+DROP Table Language;
+
+
+// Var for multilang tooltips
+Translations:
+Load 
+	 "Index",
+     Ru,
+     En,
+     Kz
+From [$(DIC_QVD_PATH)TranslationsHelp.qvd] (qvd);
+
+Language:
+CROSSTABLE (Language, Translation) LOAD 
+	 Index, 
+     Ru,
+     En,
+     Kz
+RESIDENT Translations;
+
+// Variables for tooltips multilang
+LET H = replace('_H_$1_@(=FirstSortedValue(_Language, Index_))', '@', '$');
+
+LET vTranslationsRows = NoOfRows('Language');
+
+FOR i = 0 TO vTranslationsRows - 1 
+	LET _vTranslationId = Peek('Index', i, 'Language');
+	LET _vTranslation = Peek('Translation', i, 'Language');
+	LET _vTrLanguage = Peek('Language', i, 'Language');
+	
+	LET _vTrName = '_H_$(_vTranslationId)_$(_vTrLanguage)';
+	LET $(_vTrName) = '$(_vTranslation)';
+	
+	LET _vTranslationId =;
+	LET _vTranslation =;
+	LET _vTrLanguage =;
+	LET _vTrName =;
+NEXT
+
+DROP Tables Language, Translations;
+
+
+
+////7. Interface Tables
+
+
+
+//====KPI Tables====
+
+KPIMD:
+Load
+	 _KPIMDNo, 
+     replace(_Exp, '@', '$') as _ExpMD
+;
+Load * Inline [
+_KPIMDNo, 	_Exp
+1,			@(vContractsCount)
+2,			@(vContractAmount)
+];
+
+
+KPICI:
+Load
+	 _KPICINo, 
+     replace(_Exp, '@', '$') as _ExpCI
+;
+Load * Inline [
+_KPICINo, 	_Exp
+1,			@(vContractAmount)
+2,			@(vTransactionAmount)
+3,			@(vTransactionCount)
+4,			@(vAvgTransCount)
+5,			@(vAvgTransAmount)
+6,			@(v%Implementation)
+];
+
+
+TACT:
+Load
+	 _TACTNo, 
+     replace(_Exp, '@', '$') as _ExpTACT
+;
+Load * Inline [
+_TACTNo, 	_Exp
+1,			@(vContractAmount)
+2,			@(vTransactionAmount)
+];
+
+SET _MEASURE_ACT_ = 'pick(_TACTNo,' & Concat(_ExpTACT,', ') & ' )';
+
+
+KPICC:
+Load
+	 _KPICCNo, 
+     replace(_Exp, '@', '$') as _ExpCC
+;
+Load * Inline [
+_KPICCNo, 	_Exp
+1,			@(vChangesCount)
+2,			@(vAvgChangesCount)
+];
+
+
+//Multilang procedures
+CALL translationsJoinInners('KPIMD', '_KPIMDNo');
+CALL translationsJoinInners('KPICI', '_KPICINo');
+CALL translationsJoinInners('TACT', '_TACTNo');
+CALL translationsJoinInners('KPICC', '_KPICCNo');
+
+CALL translationsNewTable('ContractMultiannual', 0, '$(vContractMultiannual)');
+CALL translationsNewTable('ContractTreasuryRegistration', 0, '$(vContractTreasuryRegistration)');
+CALL translationsNewTable('ContractsStatus', 'Contracts', '$(vContractStatus)');
+CALL translationsNewTable('ContractProcurementMethod', 0, '$(vContractProcurementMethod)');
+
+
+SET NumConvertRu = "Pick(RangeSum(Floor(LOG10($1)),1), NUM($1, '# ##0'), NUM($1, '# ##0'), NUM($1, '# ##0'), NUM($1/1000, '# ##0,00 $(_T_1_Ru)', ',', ' '), NUM($1/1000, '# ##0,00 $(_T_1_Ru)', ',', ' '), NUM($1/1000, '# ##0,00 $(_T_1_Ru)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_Ru)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_Ru)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_Ru)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_Ru)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_Ru)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_Ru)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_Ru)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_Ru)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_Ru)', ',', ' '))";
+SET NumConvertEn = "Pick(RangeSum(Floor(LOG10($1)),1), NUM($1, '# ##0'), NUM($1, '# ##0'), NUM($1, '# ##0'), NUM($1/1000, '# ##0,00 $(_T_1_En)', ',', ' '), NUM($1/1000, '# ##0,00 $(_T_1_En)', ',', ' '), NUM($1/1000, '# ##0,00 $(_T_1_En)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_En)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_En)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_En)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_En)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_En)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_En)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_En)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_En)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_En)', ',', ' '))";
+SET NumConvertKz = "Pick(RangeSum(Floor(LOG10($1)),1), NUM($1, '# ##0'), NUM($1, '# ##0'), NUM($1, '# ##0'), NUM($1/1000, '# ##0,00 $(_T_1_Kz)', ',', ' '), NUM($1/1000, '# ##0,00 $(_T_1_Kz)', ',', ' '), NUM($1/1000, '# ##0,00 $(_T_1_Kz)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_Kz)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_Kz)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_Kz)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_Kz)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_Kz)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_Kz)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_Kz)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_Kz)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_Kz)', ',', ' '))";
+
+
+//Rename ENSTRU classification fields
+TempRu:
+Load * inline [
+init_name, join_field
+Class_codeNameRu,ENSTRUClass
+SubClass_codeNameRu,ENSTRUSubclass
+Group_codeNameRu,ENSTRUGroup
+Vedomstvo_codeNameRu,ENSTRUVedomstvo
+code_codeNameRu,ENSTRUCode
+];
+
+left join(TempRu)
+Load Ru as correct_name,
+	 "Index" as join_field
+Resident FieldNamesTable
+Where WildMatch(Index, 'ENSTRU*')
+;
+
+TempKz:
+NoConcatenate
+Load * inline [
+init_name, join_field
+Class_codeNameKz,ENSTRUClass
+SubClass_codeNameKz,ENSTRUSubclass
+Group_codeNameKz,ENSTRUGroup
+Vedomstvo_codeNameKz,ENSTRUVedomstvo
+code_codeNameKz,ENSTRUCode
+];
+
+left join(TempKz)
+Load Kz as correct_name,
+	 "Index" as join_field
+Resident FieldNamesTable
+Where WildMatch(Index, 'ENSTRU*')
+;
+
+Concatenate(TempRu)
+Load *
+Resident TempKz;
+
+drop table TempKz;
+
+Temp:
+Mapping
+Load init_name as init_name_,
+	 correct_name as correct_name_
+Resident TempRu;
+
+drop table TempRu;
+
+Rename fields using Temp;
+
+//Finalize
+Drop tables FieldNamesTable, InnerDictionaries;
+
+
+
+////8. FieldNames mapping
+
+
+DROP FIELD IDContractKey FROM Contracts;
+
+MapTable:
+Mapping
+Load * inline [
+Field_orig,	Field_Name
+award_supplier_id,Код поставщика
+award_supplier_name,Имя поставщика
+Class,Класс ЕНСТРУ (код)
+Class_codeNameKz,Класс ЕНСТРУ KZ 
+Class_codeNameRu,Класс ЕНСТРУ
+code,ЕНСТРУ классификатор (код)
+code_codeNameKz,ЕНСТРУ классификатор KZ
+code_codeNameRu,ЕНСТРУ классификатор
+contract_dateRegistered,Дата регистрации договора
+contract_dateSigned,Дата подписания договора
+contract_dateTimeSigned,ДатаВремя подписания договора
+contract_multiAnnual,_contract_multiAnnual
+contract_parentId,_contract_parentId
+contract_period_durationInDays,Длительность договора
+contract_period_endDate,Конечная дата договора
+contract_period_startDate,Начальная дата договора
+contract_rationale,Обоснование договора
+contract_status,_contract_status
+contract_tenderId,Код тендера договора
+contract_transaction_date,Дата платежа 
+contract_transaction_id,Код платежа
+contract_transaction_payee,Получатель платежа
+contract_transaction_payer,Плательщик платежа
+contract_transaction_value_amount,Сумма платежа
+contract_transaction_value_currency,Валюта платежа
+contract_treasuryRegistration,_contract_treasuryRegistration
+contract_value_amount,Сумма договора
+contract_value_currency,Валюта договора
+contract_value_valueAddedTaxIncluded,НДС контракта
+edizm,Единица измерения предмета закупки
+FullEnstruHierarchyCode,_FullEnstruHierarchyCode
+Group,Группа ЕНСТРУ (код)
+Group_codeNameKz,Группа ЕНСТРУ Kz
+Group_codeNameRu,Группа ЕНСТРУ
+IDContractKey,_IDContractKey
+IDItemKey,_IDItemKey
+IDItemOrig,Код предмета закупки
+Index_,Index_
+lot_buyer_id,Код заказчика
+lot_buyer_name,Имя заказчика
+SubClass,Подкласс ЕНСТРУ (код)
+SubClass_codeNameKz,Подкласс ЕНСТРУ Kz
+SubClass_codeNameRu,Подкласс ЕНСТРУ
+tender_procurementMethodDetails,_tender_procurementMethodDetails
+Vedomstvo,Ведомственный классификатор ЕНСТРУ (код)
+Vedomstvo_codeNameKz,Ведомственный классификатор ЕНСТРУ KZ
+Vedomstvo_codeNameRu,Ведомственный классификатор ЕНСТРУ 
+contract_guarantee,Сумма обеспечения договора
+contract_rootId,Код договора
+contract_transactionsValue,Сумма платежей по договору
+] (delimiter is ',');
+
+Rename Fields using MapTable;
+
+drop fields 
+			contract_guaranteePercent, 
+;
+
+//Reassigning variables
+//==Fields==
+SET vContractId = '[Код договора]';
+SET vContractRoot = '_contract_rootId';
+SET vContractStatus = '_contract_status';
+SET vContractMultiannual = '_contract_multiAnnual';
+SET vContractTreasuryRegistration = '_contract_treasuryRegistration';
+SET vContractRationale = '[Обоснование договора]';
+SET vContractValue = '[Сумма договора]';
+SET vContractDateSigned = '[Дата подписания договора]';
+SET vContractGuarantee = '[Сумма обеспечения договора]';
+SET vContractProcurementMethod = '_tender_procurementMethodDetails';
+
+SET vTransactionId = '[Код платежа]';
+SET vTransactionValue = '[Сумма платежей по договору]';
+SET vTransactionDate = '[Дата платежа]';
+
+SET vContractEnstruClass = =replace('[@(=@(T(19)))]', '@', '$');
+SET vContractEnstruSubclass = =replace('[@(=@(T(20)))]', '@', '$');
+SET vContractEnstruGroup = =replace('[@(=@(T(21)))]', '@', '$');
+SET vContractEnstruVedomstvo = =replace('[@(=@(T(22)))]', '@', '$');
+SET vContractEnstruFull = =replace('[@(=@(T(23)))]', '@', '$');
+
+SET vBuyerName = '[Имя заказчика]';
+SET vBuyerId = '[Код закупщика]';							
+SET vSupplierName = '[Имя поставщика]';
+SET vSupplierId = '[Код поставщика]';						
+
+
+////Exit script
+
+
+
+Exit script;

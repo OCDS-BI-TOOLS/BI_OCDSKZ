@@ -1,0 +1,1922 @@
+////Main 
+
+
+
+SET ThousandSep=' ';
+SET DecimalSep=',';
+SET MoneyThousandSep=' ';
+SET MoneyDecimalSep=',';
+SET MoneyFormat='# ##0,00 ₴;-# ##0,00 ₴';
+SET TimeFormat='hh:mm:ss';
+SET DateFormat='DD.MM.YYYY';
+SET TimestampFormat='DD.MM.YYYY hh:mm:ss[.fff]';
+SET FirstWeekDay=0;
+SET BrokenWeeks=1;
+SET ReferenceDay=0;
+SET FirstMonthOfYear=1;
+SET CollationLocale='uk-UA';
+//SET CreateSearchIndexOnReload=1;
+SET MonthNames='січ.;лют.;бер.;квіт.;трав.;черв.;лип.;серп.;вер.;жовт.;лист.;груд.';
+SET LongMonthNames='січень;лютий;березень;квітень;травень;червень;липень;серпень;вересень;жовтень;листопад;грудень';
+SET DayNames='пн;вт;ср;чт;пт;сб;нд';
+SET LongDayNames='понеділок;вівторок;середа;четвер;пʼятниця;субота;неділя';
+SET NumericalAbbreviation='3:k;6:M;9:G;12:T;15:P;18:E;21:Z;24:Y;-3:m;-6:μ;-9:n;-12:p;-15:f;-18:a;-21:z;-24:y';
+SET HidePrefix = '_';
+
+Set vPrefix = '_';
+SET Lan1Name = 'Ru';
+SET Lan2Name = 'En';
+SET Lan3Name = 'Kz';
+
+SET DIC_QVD_PATH = 'lib://OCDSKZData/01_DataBase_Plans/02_QVD_DB/01_Dictionary/';
+SET TRN_QVD_PATH = 'lib://OCDSKZData/01_DataBase_Plans/02_QVD_DB/02_Transaction/';
+SET DIC_QVD_PATH_TENDER = 'lib://OCDSKZData/01_DataBase/02_QVD_DB/01_Dictionary/';
+SET TRN_QVD_PATH_TENDER = 'lib://OCDSKZData/01_DataBase/02_QVD_DB/02_Transaction/';
+SET FILES_PATH = 'lib://OCDSKZData/01_DataBase_Plans/01_DataFiles/';
+SET DIC_QVD_PATH_CONTRACTS = 'lib://OCDSKZData/01_DataBase_Contracts/02_QVD_DB/01_Dictionary/'; //
+SET TRN_QVD_PATH_CONTRACTS = 'lib://OCDSKZData/01_DataBase_Contracts/02_QVD_DB/02_Transaction/'; //
+
+SET DIC_QVD_PATH_PLANFACT = 'lib://OCDSKZData/01_DataBase_PlanFact/02_QVD_DB/01_Dictionary/'; //
+
+SET rmvChr = "KeepChar($1, '0123456789')";
+
+
+
+////-1. (tmp) store dictionaries
+
+
+Multilang_Dictionaries:
+NoConcatenate
+LOAD
+    F1 as Index,
+    F2 as Reference,
+    F3 as Ru,
+    F4 as En,
+    F5 as Kz,
+    F6 as attributeOf
+FROM [lib://OCDSKZ_Web_dev]
+(html, utf8, embedded labels, table is @1, url is '***')
+where F1 <> 'Index' and len(F1)>0
+;
+
+store Multilang_Dictionaries into [$(DIC_QVD_PATH_PLANFACT)/Multilang_Dictionaries.qvd] (qvd);
+Drop table Multilang_Dictionaries;
+
+Multilang_FieldNames:
+NoConcatenate
+LOAD
+    F1 as Index,
+    F2 as Reference,
+    F3 as Ru,
+    F4 as En,
+    F5 as Kz
+FROM [lib://OCDSKZ_Web_dev]
+(html, utf8, embedded labels, table is @1, url is '***')
+where F1 <> 'Index' and len(F1)>0
+;
+
+store Multilang_FieldNames into [$(DIC_QVD_PATH_PLANFACT)/Multilang_FieldNames.qvd] (qvd);
+Drop table Multilang_FieldNames;
+
+Multilang_Labels:
+NoConcatenate
+LOAD
+    F1 as "Index",
+    F2 as Reference,
+    F3 as Ru,
+    F4 as En,
+    F5 as Kz
+FROM [lib://OCDSKZ_Web_dev]
+(html, utf8, embedded labels, table is @1, url is '***')
+where F1 <> 'Index' and len(F1)>0
+;
+
+store Multilang_Labels into [$(DIC_QVD_PATH_PLANFACT)/Multilang_Labels.qvd] (qvd);
+Drop table Multilang_Labels;
+
+
+// Sheets and objects tooltips
+TranslationsHelp:
+LOAD 
+    F1 as "Index",
+    F2 as Reference,
+    F3 as Ru,
+    F4 as En,
+    F5 as Kz
+FROM [lib://OCDSKZ_Web_dev]
+(html, utf8, embedded labels, table is @1, url is '***')
+where F1 <> 'Index' and len(F1)>0
+;
+
+Store TranslationsHelp into [$(DIC_QVD_PATH)TranslationsHelp.qvd] (qvd);
+
+Drop Table TranslationsHelp;
+
+////0. Procedures
+
+
+
+//Procedures for translation of fields
+
+SUB translationsJoin (tableName, keyField)
+
+  FieldNames_tmp:
+  NoConcatenate
+  Load 
+      "Index",
+      [$(Lan1Name)],
+      [$(Lan2Name)],
+      [$(Lan3Name)]
+  Resident FieldNamesTable
+  where Index like '$(tableName)';
+  
+  TRACE $(tableName);
+
+  Let vLan1FieldName = Peek('$(Lan1Name)', -1, 'FieldNames_tmp');
+  Let vLan2FieldName = Peek('$(Lan2Name)', -1, 'FieldNames_tmp');
+  Let vLan3FieldName = Peek('$(Lan3Name)', -1, 'FieldNames_tmp');
+
+  left join("$(tableName)")
+  Load Index as "$(keyField)",
+       [$(Lan1Name)] as "$(vLan1FieldName)",
+       [$(Lan2Name)] as "$(vLan2FieldName)",
+       [$(Lan3Name)] as "$(vLan3FieldName)"
+  Resident InnerDictionaries
+  where attributeOf like '$(tableName)';
+
+  drop table FieldNames_tmp;
+
+END SUB;
+
+
+SUB translationsNewTable (newTableName, existingTableName, keyField)
+// 0 - w/o KEEP
+  FieldNames_tmp:
+  NoConcatenate
+  Load 
+      "Index",
+      [$(Lan1Name)],
+      [$(Lan2Name)],
+      [$(Lan3Name)]
+  Resident FieldNamesTable
+  where Index like '$(newTableName)';
+  
+  TRACE $(tableName);
+
+  Let vLan1FieldName = Peek('$(Lan1Name)', -1, 'FieldNames_tmp');
+  Let vLan2FieldName = Peek('$(Lan2Name)', -1, 'FieldNames_tmp');
+  Let vLan3FieldName = Peek('$(Lan3Name)', -1, 'FieldNames_tmp');
+
+  IF existingTableName <> 0 THEN
+    [$(newTableName)]:
+    left keep("$(existingTableName)")
+    Load 
+        "Index" as [$(keyField)],
+        [$(Lan1Name)] as [$(vLan1FieldName)],
+        [$(Lan2Name)] as [$(vLan2FieldName)],
+        [$(Lan3Name)] as [$(vLan3FieldName)]
+    Resident InnerDictionaries
+    where attributeOf like '$(newTableName)';
+    
+    ELSEIF existingTableName = 0 THEN
+    	[$(newTableName)]:
+    	Load 
+            "Index" as [$(keyField)],
+            [$(Lan1Name)] as [$(vLan1FieldName)],
+            [$(Lan2Name)] as [$(vLan2FieldName)],
+            [$(Lan3Name)] as [$(vLan3FieldName)]
+    	Resident InnerDictionaries
+    	where attributeOf like '$(newTableName)';
+   ENDIF
+
+  drop table FieldNames_tmp;
+
+END SUB;
+
+SUB translationsJoinInners(tableName, keyField)
+
+  JoinTypes:
+  Load Distinct Reference as joinType
+  Resident InnerDictionaries
+  where attributeOf like '$(tableName)';
+
+  For each vJoinType in FieldValueList('joinType')
+
+    left join("$(tableName)")
+    LOAD Index as "$(keyField)",
+         [$(Lan1Name)] as "$(vPrefix)$(tableName)$(vJoinType)$(Lan1Name)",
+         [$(Lan2Name)] as "$(vPrefix)$(tableName)$(vJoinType)$(Lan2Name)",
+         [$(Lan3Name)] as "$(vPrefix)$(tableName)$(vJoinType)$(Lan3Name)"
+    Resident InnerDictionaries
+    where attributeOf like '$(tableName)'
+    and Reference like '$(vJoinType)';
+
+  next vJoinType;
+
+  drop table JoinTypes;
+
+END SUB;
+
+
+
+////1. Transactions
+
+
+Directory [$(TRN_QVD_PATH_TENDER)];
+
+SET vNotIdentifiedName = 'notIdentified';
+
+Lots:
+LOAD
+    IDLotOrig,
+    lot_status,
+    lot_amount,
+    IDbuyerOrig,
+    lot_buyer_name,
+    IDTenderOrig,
+    IDReleaseOCIDOrig,
+    IDReleaseOCIDKey,
+    IDTenderKey,
+    IDbuyerKey
+    ,IDLotOrig&'|'&IDTenderOrig AS _IDLotOrig
+FROM [Lot.qvd]
+(qvd);
+
+
+left join(Lots)
+LOAD 
+	 item_relatedLot&'|'&IDTenderOrig AS _IDLotOrig,
+    IF(NOT WILDMATCH(item_classification_identifier, '??.??.??.???.???.??.????.????????????', '??????.???.??????'), '$(vNotIdentifiedName)', item_classification_identifier) AS item_classification_identifier,
+    IDPlanningsKey
+FROM [Item.qvd]
+(qvd);
+
+left join(Lots)
+LOAD
+    IF(IsNull(tender_procurementMethodDetails), '$(vNotIdentifiedName)', tender_procurementMethodDetails) AS tender_procurementMethodDetails,
+    IDTenderKey
+    ,tender_status as tender_status_
+    ,tender_subStatus as tender_subStatus_,
+    tender_enquiryPeriod_startDate,
+    tender_tenderPeriod_startDate
+FROM [Tender.qvd]
+(qvd);
+
+
+left join(Lots)
+LOAD
+    IDPlanningsOrig,
+    IF(IsNull(plannings_procurementMethodDetails), '$(vNotIdentifiedName)', plannings_procurementMethodDetails) AS plannings_procurementMethodDetails,
+    plannings_type,
+    plannings_procurementCategory,
+    IDReleaseOCIDOrig,
+    IDTenderOrig,
+    IDReleaseOCIDKey,
+    IDTenderKey,
+    IDPlannings as IDPlanningsKey
+FROM [Plannings.qvd]
+(qvd);
+
+
+//Tables from tendering modules: used to map lot statuses from 350 to complete
+Bids:
+LOAD
+    IDBidOrig,
+    bid_date,
+    bid_status,
+    bid_relatedLot,
+     IDtendererOrig,
+    IDtendererKey,
+    IDBid as IDBidKey,
+    bid_relatedLot&'|'&IDTenderOrig AS _IDLotOrig
+FROM [Bids.qvd]
+(qvd);
+
+Awards:
+LOAD
+     IDAwardOrig,
+    award_status,
+    award_date,
+    award_relatedBid,
+    award_place,
+    award_supplier_id,
+    award_supplier_name,
+    singleSourcePlanFlag,
+     IDTenderKey,
+     IDAward as IDAwardKey,
+     IDAward,
+     IDBidKey
+FROM [Award.qvd]
+(qvd);
+
+AwardContracts:
+LOAD
+     contract_awardID,
+     IDContractOrig,
+     IDReleaseOCIDOrig,
+     IDTenderOrig,
+     IDTenderKey,
+    IDContractKey,
+    IDAwardKey
+FROM [ContractAwards.qvd]
+(qvd);
+
+Contracts:
+LOAD
+    contract_contract_status,
+    IDContract as IDContractKey,
+    IDContractOrig
+FROM [Contract.qvd]
+(qvd);
+
+
+Directory [$(TRN_QVD_PATH)]; 
+
+
+Plan_items:
+LOAD
+    IDItemOrig,
+    item_date,
+    item_rootId,
+    item_status,
+    plan_budgetYear,
+    IF(IsNull(item_procurementMethodDetails), '$(vNotIdentifiedName)', item_procurementMethodDetails) AS item_procurementMethodDetails,
+    item_isFromAssociationOfDisabled,
+    item_type,
+    item_procurementCategory,
+    item_quantity,
+    item_plannedMonth,
+    item_isPreliminaryPlan,
+    item_procurementMethodRationale,
+    item_fundingSource,
+    item_departmentalCode,
+    item_projectAdministratorID,
+    item_projectAdministratorName,
+    item_parentId,
+    plan_buyer_id,
+    plan_buyer_name_ru,
+    plan_buyer_name_kz,
+    item_classification_scheme,
+    IF(NOT WILDMATCH(item_classification_id, '??.??.??.???.???.??.????.????????????', '??????.???.??????'), '$(vNotIdentifiedName)', item_classification_id) AS item_classification_id,
+    item_unit_scheme,
+    item_unit_id,
+    item_unit_name,
+    item_unit_value_amount,
+    item_unit_value_currency,
+    IDItem
+FROM [Plan_Items.qvd]
+(qvd);
+Plans:
+NoConcatenate
+Load  
+    IDItemOrig,
+    item_date,
+    item_rootId as IDPlanningsOrig,
+    item_rootId,
+    item_status,
+    item_procurementMethodDetails,
+    item_type,
+    item_procurementCategory,
+    item_quantity,
+    item_plannedMonth,
+    item_unit_value_amount,
+    item_unit_value_currency,
+    item_classification_scheme,
+    item_classification_id,
+    IDItem AS IDItemKey
+    ,
+    [plan_buyer_id],
+    [plan_buyer_name_ru],
+    [plan_buyer_name_kz],
+    [plan_budgetYear],
+    IF(Previous(item_rootId) <> item_rootId, 1) AS distinctPlanFlag
+Resident Plan_items
+order by item_rootId, item_date desc
+;
+
+RENAME TABLE Plans to Plans_;
+
+Plans:
+NoConcatenate
+Load     
+    IDItemOrig,
+    item_date,
+    IDPlanningsOrig,
+    item_rootId,
+    item_status,
+    item_procurementMethodDetails,
+    item_type,
+    item_procurementCategory,
+    item_quantity,
+    item_plannedMonth,
+    item_unit_value_amount,
+    item_unit_value_currency,
+    item_classification_scheme,
+    item_classification_id,
+    IDItemKey
+    ,
+    [plan_buyer_id],
+    [plan_buyer_name_ru],
+    [plan_buyer_name_kz],
+    [plan_budgetYear]
+RESIDENT Plans_
+WHERE distinctPlanFlag=1
+;
+
+DROP TABLE Plans_;
+
+drop table Plan_items;
+
+left join(Plans)
+Load 
+    item_rootId,
+    item_quantity*item_unit_value_amount as item_value,
+    IDItemKey
+Resident Plans;
+
+
+Directory [$(TRN_QVD_PATH_CONTRACTS)]; 
+
+Contracts_from_contracting:
+NoConcatenate
+LOAD
+    IDContractOrig,
+    contract_rootId,
+    contract_status,
+    contract_dateSigned,
+    contract_dateRegistered,
+    contract_value_amount,
+    contract_value_currency,
+    contract_value_valueAddedTaxIncluded,
+    IDContract as IDContractKey
+FROM [Contracts.qvd]
+(qvd);
+
+Contract_Items_from_contracting:
+NoConcatenate
+LOAD
+    IDItemOrig,
+    IF(IsNull(item_procurementMethodDetails), '$(vNotIdentifiedName)', item_procurementMethodDetails) AS item_procurementMethodDetails,
+    item_procurementCategory,
+    item_classification_scheme,
+    IF(NOT WILDMATCH(item_classification_id, '??.??.??.???.???.??.????.????????????', '??????.???.??????'), '$(vNotIdentifiedName)', item_classification_id) AS item_classification_id,
+    IDContractKey,
+    IDItem as IDItemKey
+FROM [Contract_Items.qvd]
+(qvd);
+
+Contract_Transactions_from_contracting:
+NoConcatenate
+LOAD
+    contract_transaction_id,
+    contract_transaction_value_amount,
+    IDContractKey
+FROM [Contract_Transactions.qvd]
+(qvd);
+
+DROP FIELD IDLotOrig;
+RENAME FIELD _IDLotOrig TO IDLotOrig;
+
+
+
+////3. For KPI
+
+
+//Adding flags to lots that it has contracts and awards to it
+left join(AwardContracts)
+Load IDContractKey,
+	 1 as award_is_contracted
+Resident Contracts
+where contract_contract_status = 'active'
+;
+
+drop table Contracts;
+
+left join(Awards)
+Load distinct IDAwardKey,
+	 IDContractOrig,
+	 award_is_contracted as award_is_contracted
+Resident AwardContracts;
+
+Drop table AwardContracts;
+
+Left join(Bids)
+Load IDBidKey,
+	 IDContractOrig as IDContractOrig_comp,
+	 award_is_contracted as award_is_contracted_,
+     award_status as award_status,
+     award_place as award_place
+Resident Awards;
+
+Left Join(Bids)
+Load IDBidOrig,
+	 if(bid_status = 'valid' and award_place = 1, 'winner', 
+     	if(bid_status = 'valid' and award_place = 2, 'secondPlace', 
+        	bid_status)) as bid_status_complex
+Resident Bids;
+
+Left join(Lots)
+Load IDLotOrig,
+	 Concat(DISTINCT award_is_contracted_) as award_is_contracted_
+Resident Bids
+group by IDLotOrig
+;
+
+
+left join(Lots)
+Load IDLotOrig,
+	 concat(distinct IDContractOrig_comp, '; ') as IDContractOrig_comp
+Resident Bids
+where award_is_contracted_=1
+group by IDLotOrig
+;
+
+
+
+drop field award_is_contracted_ from Bids;
+
+Left join(Lots)
+Load IDTenderKey,
+	 Date(Floor(award_date)) as tender_date_noncomp,
+     1 as award_is_contracted_SSP,
+     IDContractOrig as IDContractOrig_noncomp
+Resident Awards
+where singleSourcePlanFlag = 1
+;
+
+
+
+drop table Awards;
+
+left join(Lots)
+Load IDLotOrig,
+     RangeMax(tender_enquiryPeriod_startDate, tender_tenderPeriod_startDate) as tender_date_comp
+Resident Lots;
+
+
+
+left join(Lots)
+Load IDLotOrig,
+	 Alt(award_is_contracted_, award_is_contracted_SSP) as lot_is_contracted,
+     IF(not IsNull(IDContractOrig_noncomp), IDContractOrig_noncomp, IDContractOrig_comp) as IDContractOrig,
+  	 Dual(Year(Alt(tender_date_noncomp, tender_date_comp)), YearStart(Alt(tender_date_noncomp, tender_date_comp))) AS lot_year
+Resident Lots;
+
+
+
+drop fields award_is_contracted_, award_is_contracted_SSP from Lots;
+drop fields IDContractOrig_noncomp, IDContractOrig_comp from Lots;
+drop fields tender_date_noncomp, tender_date_comp;
+
+Drop field IDContractOrig_comp;
+
+
+drop fields award_status, award_place from Bids;
+
+left join(Lots)
+Load IDLotOrig,
+	 if(not IsNull(tender_subStatus_), tender_subStatus_, tender_status_) as tender_subStatus
+Resident Lots;
+
+
+drop fields tender_subStatus_, tender_status_;
+
+Left join(Lots)
+Load IDLotOrig,
+     if(lot_status = 'active', tender_subStatus, lot_status) as lot_subStatus_
+Resident Lots;
+
+
+//Calculate lot status
+Left join(Lots)
+Load IDLotOrig,
+	 if(lot_status = 'active' and lot_is_contracted = 1, 'complete', lot_subStatus_) as lot_subStatus
+Resident Lots;
+
+
+drop field lot_subStatus_;
+drop fields tender_subStatus;
+
+//Flag of the lot to be included into calculations
+left join(Lots)
+Load IDLotOrig,
+	 1 as lot_validForCalculations
+Resident Lots
+where not WildMatch(lot_subStatus, 'unsuccessful', 'cancelled')
+;
+
+
+//Flag of the plan to be included into calculations
+left join(Plans)
+Load IDItemKey,
+	 1 as plan_validForCalculations
+Resident Plans
+where not WildMatch(item_status, 'changed', 'delegated')
+;
+
+//Interface field with certain statuses of the plan items hidden
+rename field item_status to item_status_complete;
+
+left join(Plans)
+Load IDItemKey,
+	 item_status_complete as item_status
+Resident Plans
+where not WildMatch(item_status_complete, 'changed', 'delegated')
+;
+
+//Flag of the contract to be included into calculations
+left join(Contracts_from_contracting)
+Load IDContractOrig,
+	 1 as contract_validForCalculations
+Resident Contracts_from_contracting
+where WildMatch(contract_status, 'pending', 'active', 'complete', 'terminated', 'partiallyComplete')
+;
+
+//KPI of the contracts
+
+//GSW and ENSTRU contract classification
+left join(Contract_Items_from_contracting)
+Load IDItemKey,
+	 left(item_classification_id, 2)
+     &'.'&mid(item_classification_id, 3, 2)
+     &'.'&mid(item_classification_id, 5, 2)
+     &mid(item_classification_id, 7, 4)
+     &right(item_classification_id, 7) as item_classification_id_dotted //formatted field for easier calculations further 
+Resident Contract_Items_from_contracting
+where WildMatch(item_classification_id, '??????.???.??????');
+
+left join(Contract_Items_from_contracting)
+Load IDItemKey,
+	 if(not IsNull(item_classification_id_dotted), item_classification_id_dotted, item_classification_id) as item_classification_id_mod
+Resident Contract_Items_from_contracting;
+
+drop field item_classification_id_dotted;
+
+RENAME TABLE Contract_Items_from_contracting TO Contract_Items_;
+
+Contract_Items:
+NoConcatenate
+LOAD IDItemKey,
+	 IDContractKey,
+     item_procurementMethodDetails,
+	 left(item_classification_id_mod, 12) as 12,
+     left(item_classification_id_mod, 8) AS 8,
+     left(item_classification_id_mod, 5) AS 5,
+     left(item_classification_id_mod, 2) AS 2,
+     item_procurementCategory,
+     item_classification_id,
+     ROWNO() AS recordNumber
+Resident Contract_Items_
+ORDER BY IDContractKey, item_classification_id
+;
+
+DROP TABLE Contract_Items_;
+
+RENAME TABLE Contract_Items TO Contract_Items_;
+
+Contract_Items:
+NoConcatenate
+LOAD IDItemKey,
+	 IDContractKey,
+     item_procurementMethodDetails,
+	 "12",
+     "8",
+     "5",
+     "2",
+     item_procurementCategory,
+     item_classification_id,
+     recordNumber
+     ,
+	 IF(Previous(IDContractKey) <> IDContractKey, 1) AS startRootFlag,
+     IF(PREVIOUS(IDContractKey) <> IDContractKey, 1, IF(Previous(item_procurementCategory) = item_procurementCategory, 1)) AS sameProcurementCategoryFlag,
+     IF(PREVIOUS(IDContractKey) <> IDContractKey, 1, IF(Previous("12") = "12", 1)) AS same12,
+     IF(PREVIOUS(IDContractKey) <> IDContractKey, 1, IF(Previous("8") = "8", 1)) AS same8,
+     IF(PREVIOUS(IDContractKey) <> IDContractKey, 1, IF(Previous("5") = "5", 1)) AS same5,
+     IF(PREVIOUS(IDContractKey) <> IDContractKey, 1, IF(Previous("2") = "2", 1)) AS same2,
+     IF(PREVIOUS(IDContractKey) <> IDContractKey, 1, IF(Previous("item_classification_id") = "item_classification_id", 1)) AS same_item_classification_id
+Resident Contract_Items_;
+
+DROP TABLE Contract_Items_;
+
+
+T:
+NoConcatenate
+Load DISTINCT 	 IDContractKey,
+	 "12",
+     "8",
+     "5",
+     "2",
+     item_procurementCategory,
+     item_classification_id
+Resident Contract_Items
+WHERE startRootFlag=1
+;
+
+LEFT JOIN(T)
+LOAD IDContractKey,
+	 1 AS SC
+RESIDENT Contract_Items
+WHERE same_item_classification_id = 1
+;
+
+LEFT JOIN(T)
+LOAD IDContractKey,
+	 1 as noSC
+RESIDENT Contract_Items
+WHERE same_item_classification_id <> 1
+;
+
+
+
+TFinale:
+NoConcatenate
+LOAD IDContractKey,
+	 IDContractKey AS contract_rootId_reff,
+	 "12",
+     "8",
+     "5",
+     "2",
+     item_procurementCategory,
+     item_classification_id
+RESIDENT T
+WHERE SC=1 AND noSC<>1
+;
+
+DROP TABLE T;
+
+//12 chars deep
+
+T:
+NoConcatenate
+Load DISTINCT IDContractKey,
+	 "12",
+     "8",
+     "5",
+     "2",
+     item_procurementCategory,
+     item_classification_id
+Resident Contract_Items
+WHERE NOT EXISTS(contract_rootId_reff, IDContractKey)
+AND startRootFlag=1
+;
+
+LEFT JOIN(T)
+LOAD IDContractKey,
+	 1 AS S12
+RESIDENT Contract_Items
+WHERE same12 = 1
+;
+
+LEFT JOIN(T)
+LOAD IDContractKey,
+	 1 as noS12
+RESIDENT Contract_Items
+WHERE same12 <> 1
+;
+
+//TFinale:
+CONCATENATE(TFinale)
+LOAD IDContractKey,
+	 IDContractKey AS contract_rootId_reff,
+	 "12",
+     "8",
+     "5",
+     "2",
+     item_procurementCategory,
+     'mixed '&item_procurementCategory AS item_classification_id
+RESIDENT T
+WHERE S12=1 AND noS12<>1
+;
+
+DROP TABLE T;
+
+//8 chars deep
+
+T:
+NoConcatenate
+Load DISTINCT IDContractKey,
+	 "12",
+     "8",
+     "5",
+     "2",
+     item_procurementCategory,
+     item_classification_id
+Resident Contract_Items
+WHERE NOT EXISTS(contract_rootId_reff, IDContractKey)
+AND startRootFlag=1
+;
+
+LEFT JOIN(T)
+LOAD IDContractKey,
+	 1 AS S8
+RESIDENT Contract_Items
+WHERE same8 = 1
+;
+
+LEFT JOIN(T)
+LOAD IDContractKey,
+	 1 as noS8
+RESIDENT Contract_Items
+WHERE same8 <> 1
+;
+
+//TFinale:
+CONCATENATE(TFinale)
+LOAD IDContractKey,
+	 IDContractKey AS contract_rootId_reff,
+	 "2",
+     "8",
+     "5",
+     'mixed '&item_procurementCategory AS "12",
+     item_procurementCategory,
+     'mixed '&item_procurementCategory AS item_classification_id
+RESIDENT T
+WHERE S8=1 AND noS8<>1
+;
+
+DROP TABLE T;
+
+
+//5 chars deep
+
+T:
+NoConcatenate
+Load DISTINCT IDContractKey,
+	 "12",
+     "8",
+     "5",
+     "2",
+     item_procurementCategory,
+     item_classification_id
+Resident Contract_Items
+WHERE NOT EXISTS(contract_rootId_reff, IDContractKey)
+AND startRootFlag=1
+;
+
+LEFT JOIN(T)
+LOAD IDContractKey,
+	 1 AS S5
+RESIDENT Contract_Items
+WHERE same5 = 1
+;
+
+LEFT JOIN(T)
+LOAD IDContractKey,
+	 1 as noS5
+RESIDENT Contract_Items
+WHERE same5 <> 1
+;
+
+//TFinale:
+CONCATENATE(TFinale)
+LOAD IDContractKey,
+	 IDContractKey AS contract_rootId_reff,
+	 "2",
+     "5",
+     'mixed '&item_procurementCategory AS "8",
+     'mixed '&item_procurementCategory AS "12",
+     item_procurementCategory,
+     'mixed '&item_procurementCategory AS item_classification_id
+RESIDENT T
+WHERE S5=1 AND noS5<>1
+;
+
+DROP TABLE T;
+
+
+//2 chars deep
+
+T:
+NoConcatenate
+Load DISTINCT IDContractKey,
+	 "12",
+     "8",
+     "5",
+     "2",
+     item_procurementCategory,
+     item_classification_id
+Resident Contract_Items
+WHERE NOT EXISTS(contract_rootId_reff, IDContractKey)
+AND startRootFlag=1
+;
+
+LEFT JOIN(T)
+LOAD IDContractKey,
+	 1 AS S2
+RESIDENT Contract_Items
+WHERE same2 = 1
+;
+
+LEFT JOIN(T)
+LOAD IDContractKey,
+	 1 as noS2
+RESIDENT Contract_Items
+WHERE same2 <> 1
+;
+
+//TFinale:
+CONCATENATE(TFinale)
+LOAD IDContractKey,
+	 IDContractKey AS contract_rootId_reff,
+	 "2",
+     'mixed '&item_procurementCategory AS "5",
+     'mixed '&item_procurementCategory AS "8",
+     'mixed '&item_procurementCategory AS "12",
+     item_procurementCategory,
+     'mixed '&item_procurementCategory AS item_classification_id
+RESIDENT T
+WHERE S2=1 AND noS2<>1
+;
+
+DROP TABLE T;
+
+
+
+//proc category deep
+
+T:
+NoConcatenate
+Load DISTINCT IDContractKey,
+	 "12",
+     "8",
+     "5",
+     "2",
+     item_procurementCategory,
+     item_classification_id
+Resident Contract_Items
+WHERE NOT EXISTS(contract_rootId_reff, IDContractKey)
+AND startRootFlag=1
+;
+
+LEFT JOIN(T)
+LOAD IDContractKey,
+	 1 AS SP
+RESIDENT Contract_Items
+WHERE sameProcurementCategoryFlag = 1
+;
+
+LEFT JOIN(T)
+LOAD IDContractKey,
+	 1 as noSP
+RESIDENT Contract_Items
+WHERE sameProcurementCategoryFlag <> 1
+;
+
+//TFinale:
+CONCATENATE(TFinale)
+LOAD IDContractKey,
+	 IDContractKey AS contract_rootId_reff,
+	 'mixed '&item_procurementCategory AS "2",
+     'mixed '&item_procurementCategory AS "5",
+     'mixed '&item_procurementCategory AS "8",
+     'mixed '&item_procurementCategory AS "12",
+     item_procurementCategory,
+     'mixed '&item_procurementCategory AS item_classification_id
+RESIDENT T
+WHERE SP=1 AND noSP<>1
+;
+
+DROP TABLE T;
+
+
+
+//only mixed goods left
+
+CONCATENATE(TFinale)
+LOAD IDContractKey,
+	 IDContractKey AS contract_rootId_reff,
+	 'mixed'AS "2",
+     'mixed'AS "5",
+     'mixed'AS "8",
+     'mixed'AS "12",
+     'mixed'AS item_procurementCategory,
+     'mixed'AS item_classification_id
+RESIDENT Contract_Items
+WHERE NOT EXISTS(contract_rootId_reff, IDContractKey)
+AND startRootFlag=1
+;
+
+LEFT JOIN(TFinale)
+LOAD IDContractKey,
+	 item_procurementMethodDetails
+RESIDENT Contract_Items
+WHERE startRootFlag=1
+;
+
+
+DROP TABLE Contract_Items;
+
+
+LEFT JOIN(Contracts_from_contracting)
+LOAD IDContractKey,
+	 item_procurementMethodDetails,
+item_classification_id AS contract_classification_id,
+IF(WILDMATCH(item_classification_id, '$(vNotIdentifiedName)'), '$(vNotIdentifiedName)', "12")  AS contract_classification_vedomstvo,
+IF(WILDMATCH(item_classification_id, '$(vNotIdentifiedName)'), '$(vNotIdentifiedName)', "8")  AS contract_classification_group,
+IF(WILDMATCH(item_classification_id, '$(vNotIdentifiedName)'), '$(vNotIdentifiedName)', "5")  AS contract_classification_subclass,
+IF(WILDMATCH(item_classification_id, '$(vNotIdentifiedName)'), '$(vNotIdentifiedName)', "2")  AS contract_classification_class
+RESIDENT TFinale;
+
+DROP TABLE TFinale;
+
+rename fields 	
+				contract_classification_vedomstvo to contract_classification_vedomstvo_,
+                contract_classification_group to contract_classification_group_,
+                contract_classification_subclass to contract_classification_subclass_,
+                contract_classification_class to contract_classification_class_
+;
+
+left join(Contracts_from_contracting) //иерархия строится только для удовлетворяющих условиям кодов
+Load IDContractKey,
+	 text(contract_classification_vedomstvo_) as contract_classification_vedomstvo,
+     text(contract_classification_group_) as contract_classification_group,
+     text(contract_classification_subclass_) as contract_classification_subclass,
+     text(contract_classification_class_) as contract_classification_class
+Resident Contracts_from_contracting
+where WildMatch(contract_classification_id, '??????.???.??????', '??.??.??.???.???.??.????.????????????', 'mixed*', '$(vNotIdentifiedName)')
+;
+
+
+
+drop fields		
+				contract_classification_vedomstvo_,
+                contract_classification_group_,
+                contract_classification_subclass_,
+                contract_classification_class_
+;
+
+//adding tenders hierarchy
+LotsHierarchy:
+Load distinct item_classification_identifier
+	 ,text(left(item_classification_identifier, 12)) as Vedomstvo
+     ,text(left(item_classification_identifier, 8)) as Group
+     ,text(left(item_classification_identifier, 5)) as SubClass
+     ,text(left(item_classification_identifier, 2)) as Class
+Resident Lots
+Where WildMatch(item_classification_identifier,
+'??.??.??.???.???.??.????.????????????')
+;
+
+Concatenate(LotsHierarchy)
+Load Distinct item_classification_identifier
+	 ,text(left(item_classification_identifier, 2)&'.'&mid(item_classification_identifier, 3, 2)&'.'&mid(item_classification_identifier, 5, 2)&mid(item_classification_identifier, 7, 4)) as Vedomstvo
+     ,text(left(item_classification_identifier, 2)&'.'&mid(item_classification_identifier, 3, 2)&'.'&mid(item_classification_identifier, 5, 2)) as Group
+     ,text(left(item_classification_identifier, 2)&'.'&mid(item_classification_identifier, 3, 2)) as SubClass
+     ,text(left(item_classification_identifier, 2)) as Class
+Resident Lots
+Where WildMatch(item_classification_identifier,
+'??????.???.??????')
+;
+
+CONCATENATE(LotsHierarchy)
+LOAD '$(vNotIdentifiedName)' AS Vedomstvo,
+	 '$(vNotIdentifiedName)' AS Group,
+     '$(vNotIdentifiedName)' AS SubClass,
+     '$(vNotIdentifiedName)' AS Class,
+     '$(vNotIdentifiedName)' AS item_classification_identifier
+AUTOGENERATE(1);
+
+left join(Lots)
+Load item_classification_identifier,
+	 Vedomstvo,
+     Group,
+     SubClass,
+     Class
+Resident LotsHierarchy;
+
+
+
+drop table LotsHierarchy;
+
+//Ading plans hierarchy
+PlanHierarchy:
+NoConcatenate
+Load distinct item_classification_id
+	 ,text(left(item_classification_id, 12)) as Vedomstvo
+     ,text(left(item_classification_id, 8)) as Group
+     ,text(left(item_classification_id, 5)) as SubClass
+     ,text(left(item_classification_id, 2)) as Class
+Resident Plans
+Where WildMatch(item_classification_id,
+'??.??.??.???.???.??.????.????????????')
+;
+
+Concatenate(PlanHierarchy)
+Load Distinct item_classification_id
+	 //,item_classification_identifier as code
+	 ,text(left(item_classification_id, 2)&'.'&mid(item_classification_id, 3, 2)&'.'&mid(item_classification_id, 5, 2)&mid(item_classification_id, 7, 4)) as Vedomstvo
+     ,text(left(item_classification_id, 2)&'.'&mid(item_classification_id, 3, 2)&'.'&mid(item_classification_id, 5, 2)) as Group
+     ,text(left(item_classification_id, 2)&'.'&mid(item_classification_id, 3, 2)) as SubClass
+     ,text(left(item_classification_id, 2)) as Class
+Resident Plans
+Where WildMatch(item_classification_id,
+'??????.???.??????')
+;
+
+CONCATENATE(PlanHierarchy)
+LOAD '$(vNotIdentifiedName)' AS Vedomstvo,
+	 '$(vNotIdentifiedName)' AS Group,
+     '$(vNotIdentifiedName)' AS SubClass,
+     '$(vNotIdentifiedName)' AS Class,
+     '$(vNotIdentifiedName)' AS item_classification_id
+AUTOGENERATE(1);
+
+left join(Plans)
+Load item_classification_id,
+	 Vedomstvo,
+     Group,
+     SubClass,
+     Class
+Resident PlanHierarchy;
+
+
+drop table PlanHierarchy;
+
+
+
+////3.5 Link Table
+
+
+
+LotPlanLinkTable:
+Load IDLotOrig,
+	 IDPlanningsOrig,
+     IDContractOrig,
+     IDLotOrig as IDLotOrig_for_control,
+     IDPlanningsOrig as IDPlanningsOrig_for_control,
+     IDContractOrig as IDContractOrig_for_control,
+	 lot_buyer_name&' '&$(rmvChr(IDbuyerOrig)) as buyer_nameId,
+     tender_procurementMethodDetails as procurementMethodDetails,
+     item_classification_identifier as classification_identifier,
+     Group as classification_group,
+     Vedomstvo as classification_vedomstvo,
+     Class as classification_class,
+     SubClass as classification_subclass,
+     lot_year as year
+     ,IDLotOrig&IDPlanningsOrig&IDContractOrig as IDLotPlanContract
+     ,1 as _presentLotPlanContractFlag
+Resident Lots;
+
+
+right join(LotPlanLinkTable)
+Load IDPlanningsOrig as IDPlanningsOrig
+Resident Plans
+where exists(IDPlanningsOrig_for_control, IDPlanningsOrig)
+;
+
+Concatenate(LotPlanLinkTable)
+Load IDPlanningsOrig as IDPlanningsOrig,
+	 IDPlanningsOrig as IDLotPlanContract,
+	 plan_buyer_name_ru&' '&$(rmvChr(plan_buyer_id)) as buyer_nameId,
+     item_procurementMethodDetails as procurementMethodDetails,
+     item_classification_id as classification_identifier,
+     Group as classification_group,
+     Vedomstvo as classification_vedomstvo,
+     Class as classification_class,
+     SubClass as classification_subclass,
+     plan_budgetYear as yearTest,
+     Dual(Year(plan_budgetYear), YearStart(MakeDate(plan_budgetYear))) AS year
+Resident Plans
+where not exists(IDPlanningsOrig_for_control, item_rootId)
+;
+
+
+Concatenate(LotPlanLinkTable)
+Load IDPlanningsOrig as IDPlanningsOrig,
+	 IDLotOrig as IDLotOrig,
+     IDContractOrig as IDContractOrig,
+	 IDLotOrig&IDPlanningsOrig&IDContractOrig as IDLotPlanContract,
+     IDContractOrig as IDContractOrig_for_control,
+	 lot_buyer_name&' '&$(rmvChr(IDbuyerOrig)) as buyer_nameId,	 
+     tender_procurementMethodDetails as procurementMethodDetails,
+     item_classification_identifier as classification_identifier,
+     Group as classification_group,
+     Vedomstvo as classification_vedomstvo,
+     Class as classification_class,
+     SubClass as classification_subclass,
+     lot_year as year
+Resident Lots
+where not exists(IDLotOrig_for_control, IDLotOrig)
+;
+
+drop fields     Group ,
+     			Vedomstvo,
+     			Class,
+     			SubClass;
+
+
+Concatenate(LotPlanLinkTable)
+Load IDContractOrig as IDContractOrig,
+	 IDContractOrig as IDLotPlanContract,
+     item_procurementMethodDetails as procurementMethodDetails,
+  	 Dual(Year(contract_dateSigned), YearStart(contract_dateSigned)) AS year,
+	 contract_classification_id as classification_identifier,
+	 contract_classification_vedomstvo as classification_vedomstvo,
+	 contract_classification_group as classification_group,
+	 contract_classification_subclass as classification_subclass,
+	 contract_classification_class as classification_class
+Resident Contracts_from_contracting
+where not exists(IDContractOrig_for_control, IDContractOrig)
+;
+
+
+drop fields contract_classification_id,
+			contract_classification_vedomstvo,
+            contract_classification_group,
+            contract_classification_subclass,
+            contract_classification_class
+;
+
+
+drop field IDPlanningsOrig_for_control, IDLotOrig_for_control ,IDContractOrig_for_control;
+
+Drop field IDPlanningsOrig, IDContractOrig from Lots;
+
+//Comment the following code for debug
+Drop fields lot_buyer_name, IDbuyerOrig, tender_procurementMethodDetails, item_classification_identifier, lot_year from Lots;
+Drop fields plan_buyer_name_ru, plan_buyer_id, item_procurementMethodDetails, item_classification_id, plan_budgetYear from Plans;
+//End of the debug section
+
+
+
+////4. ProcurementDictionary
+
+
+Directory [$(DIC_QVD_PATH_TENDER)];
+
+ProcurementDictionary:
+LOAD
+    text(parent_id) as parent_id,
+    name_kz,
+    level_,
+    text(id) as id,
+    name_ru,
+    "r",
+    g,
+    text(code) as code,
+    s
+    ,edizm
+FROM [ProcurementDictionary.qvd]
+(qvd)
+;
+
+UnregisteredCodes:
+LOAD * INLINE [
+_ru, _en, _kz
+Код ЕНСТРУ не опознан, ENSTRU code not identified, ТЖҚБНА жіктеуіш анықталмаған
+];
+
+
+//adding code names
+CodesTmp:
+NoConcatenate
+Load code as classification_identifier
+     ,name_ru&' - '&code as classification_code_codeNameRu
+     ,name_kz&' - '&code as classification_code_codeNameKz
+     ,edizm
+Resident ProcurementDictionary
+where WildMatch(code,
+'??.??.??.???.???.??.????.????????????',
+'??????.???.??????')
+;
+
+Concatenate(CodesTmp)
+Load '$(vNotIdentifiedName)' AS classification_identifier
+	  ,_ru as classification_code_codeNameRu
+      ,_kz as classification_code_codeNameKz	 
+Resident UnregisteredCodes;
+
+Left join(LotPlanLinkTable)
+LOAD classification_identifier,
+	 classification_code_codeNameRu,
+     classification_code_codeNameKz,
+     edizm
+RESIDENT CodesTmp;
+
+DROP TABLE CodesTmp;
+
+VedomstvoTmp:
+NoConcatenate
+Load code as classification_vedomstvo
+     ,if(not IsNull(name_ru), ' - '&name_ru)&code as classification_Vedomstvo_codeNameRu //проверка, поскольку на сейчас коды уровня ведомства в справочнике не передаются
+     ,if(not IsNull(name_kz), ' - '&name_kz)&code as classification_Vedomstvo_codeNameKz //проверка, поскольку на сейчас коды уровня ведомства в справочнике не передаются
+Resident ProcurementDictionary
+where WildMatch(code,
+'??.??.??.???')
+;
+
+Concatenate(VedomstvoTmp)
+Load '$(vNotIdentifiedName)' AS classification_vedomstvo
+	  ,_ru as classification_Vedomstvo_codeNameRu
+      ,_kz as classification_Vedomstvo_codeNameKz	 
+Resident UnregisteredCodes;
+
+Left join(LotPlanLinkTable)
+LOAD classification_vedomstvo,
+	 classification_Vedomstvo_codeNameRu,
+     classification_Vedomstvo_codeNameKz
+RESIDENT VedomstvoTmp;
+
+DROP TABLE VedomstvoTmp;
+
+//ChildNode for selecting correct name
+left join(ProcurementDictionary)
+Load distinct parent_id as id,
+	 1 as isParent_flag
+Resident ProcurementDictionary
+;
+
+GroupTmp:
+NoConcatenate
+Load code as classification_group
+     ,name_ru&' - '&code as classification_Group_codeNameRu
+     ,name_kz&' - '&code as classification_Group_codeNameKz
+Resident ProcurementDictionary
+where WildMatch(code,
+'??.??.??')
+and isParent_flag = 1
+;
+
+Concatenate(GroupTmp)
+Load '$(vNotIdentifiedName)' AS classification_group
+	  ,_ru as classification_Group_codeNameRu
+      ,_kz as classification_Group_codeNameKz	 
+Resident UnregisteredCodes;
+
+Left join(LotPlanLinkTable)
+LOAD classification_group,
+	 classification_Group_codeNameRu,
+     classification_Group_codeNameKz
+RESIDENT GroupTmp;
+
+DROP TABLE GroupTmp;
+
+left join(ProcurementDictionary)
+Load distinct parent_id as id,
+	 1 as isParent_flag
+Resident ProcurementDictionary
+;
+
+SubClassTmp:
+NoConcatenate
+Load text(
+     	if(len(code) = 4, 
+     		code&'0',
+        		left(code, 5))) as classification_subclass //обработка ситуации, когда код имеет вид ??.?
+     ,name_ru&' - '&code as classification_SubClass_codeNameRu
+     ,name_kz&' - '&code as classification_SubClass_codeNameKz
+Resident ProcurementDictionary
+Where 
+WildMatch(level_, 4)
+;
+
+Concatenate(SubClassTmp)
+Load '$(vNotIdentifiedName)' AS classification_subclass
+	  ,_ru as classification_SubClass_codeNameRu
+      ,_kz as classification_SubClass_codeNameKz	 
+Resident UnregisteredCodes;
+
+Left join(LotPlanLinkTable)
+LOAD classification_subclass,
+	 classification_SubClass_codeNameRu,
+     classification_SubClass_codeNameKz
+RESIDENT SubClassTmp;
+
+DROP TABLE SubClassTmp;
+
+
+ClassTmp:
+NoConcatenate
+Load left(code, 2) as classification_class
+     ,name_ru&' - '&left(code, 2) as classification_Class_codeNameRu
+     ,name_kz&' - '&left(code, 2) as classification_Class_codeNameKz
+Resident ProcurementDictionary
+where 
+level_ = 2
+;
+
+Concatenate(ClassTmp)
+Load '$(vNotIdentifiedName)' AS classification_class
+	  ,_ru as classification_Class_codeNameRu
+      ,_kz as classification_Class_codeNameKz	 
+Resident UnregisteredCodes;
+
+
+Left join(LotPlanLinkTable)
+LOAD classification_class,
+	 classification_Class_codeNameRu,
+     classification_Class_codeNameKz
+RESIDENT ClassTmp;
+
+DROP TABLE ClassTmp;
+
+DROP TABLE UnregisteredCodes;
+
+drop table ProcurementDictionary;
+
+rename fields 	classification_Class_codeNameRu to classification_Class_codeNameRu_, classification_Class_codeNameKz to classification_Class_codeNameKz_,
+				classification_SubClass_codeNameRu to classification_SubClass_codeNameRu_, classification_SubClass_codeNameKz to classification_SubClass_codeNameKz_,
+                classification_Group_codeNameRu to classification_Group_codeNameRu_, classification_Group_codeNameKz to classification_Group_codeNameKz_,
+                classification_Vedomstvo_codeNameRu to classification_Vedomstvo_codeNameRu_, classification_Vedomstvo_codeNameKz to classification_Vedomstvo_codeNameKz_,
+                classification_code_codeNameRu to classification_code_codeNameRu_, classification_code_codeNameKz to classification_code_codeNameKz_;
+
+left join(LotPlanLinkTable)
+Load IDLotPlanContract,
+	 if(IsNull(classification_Class_codeNameRu_), classification_class, classification_Class_codeNameRu_) as classification_Class_codeNameRu,
+	 if(IsNull(classification_Class_codeNameKz_), classification_class, classification_Class_codeNameKz_) as classification_Class_codeNameKz,
+	 if(IsNull(classification_SubClass_codeNameRu_), classification_subclass, classification_SubClass_codeNameRu_) as classification_SubClass_codeNameRu,
+	 if(IsNull(classification_SubClass_codeNameKz_), classification_subclass, classification_SubClass_codeNameKz_) as classification_SubClass_codeNameKz,
+	 if(IsNull(classification_Group_codeNameRu_), classification_group, classification_Group_codeNameRu_) as classification_Group_codeNameRu,
+	 if(IsNull(classification_Group_codeNameKz_), classification_group, classification_Group_codeNameKz_) as classification_Group_codeNameKz,
+	 if(IsNull(classification_Vedomstvo_codeNameRu_), classification_vedomstvo, classification_Vedomstvo_codeNameRu_) as classification_Vedomstvo_codeNameRu,
+	 if(IsNull(classification_Vedomstvo_codeNameKz_), classification_vedomstvo, classification_Vedomstvo_codeNameKz_) as classification_Vedomstvo_codeNameKz,
+	 if(IsNull(classification_code_codeNameRu_), classification_identifier, classification_code_codeNameRu_) as classification_code_codeNameRu, //чтобы не оставались пустные значение в кодах, не соответствующих новому/старому форматам
+     if(IsNull(classification_code_codeNameKz_), classification_identifier, classification_code_codeNameKz_) as classification_code_codeNameKz //чтобы не оставались пустные значение в кодах, не соответствующих новому/старому форматам
+Resident LotPlanLinkTable;
+
+drop fields  classification_Class_codeNameRu_,  classification_Class_codeNameKz_,
+			 classification_SubClass_codeNameRu_,  classification_SubClass_codeNameKz_,
+               classification_Group_codeNameRu_,  classification_Group_codeNameKz_,
+               classification_Vedomstvo_codeNameRu_,  classification_Vedomstvo_codeNameKz_,
+               classification_code_codeNameRu_,  classification_code_codeNameKz_;
+
+
+drop fields classification_class, classification_subclass, classification_group, classification_vedomstvo, classification_identifier;
+
+
+////5. Variables
+
+
+
+//====Fields====
+SET vBuyerId = '';
+SET vBuyerName = '';
+SET vBuyerNameId = '';
+
+SET vLotId = '';
+SET vLotStatus = '_lot_status';
+SET vLotValue = '[Стоимость лота]';
+SET vProcurementMethod = '';
+SET vBudgetYear = '';
+SET vENSTRU = '';
+
+SET vPlanId = '';
+SET vPlanStatus = '';
+SET vItemStatus = '_item_status';
+SET vAnnualPlanStatus = '';
+SET vPlanType = '';
+SET vPlanValue = '[Стоимость пункта плана]';
+SET vProcurementMethod = '';
+SET vBudgetYear = '';
+SET vENSTRU = '';
+
+SET vContractId = '';
+SET vContractStatus = '';
+SET vContractType = '';
+SET vContractValue = '[Сумма договора]';
+SET vProcurementMethod = '';
+SET vBudgetYear = '';
+SET vENSTRU = '';
+
+SET vTransactionId = '';
+SET vTransactionValue = '[Сумма платежа]';
+SET vProcurementMethod = '';
+SET vBudgetYear = '';
+SET vENSTRU = '';
+
+SET vValidLotFlagField = '_lot_validForCalculations';
+SET vValidPlanItemFlagField = '_plan_validForCalculations';
+SET vValidContractFlagField = '_contract_validForCalculations';
+
+//====Attributes====
+SET VALID_ITEMS = '$(vValidPlanItemFlagField)={1}'; 	//valid plan item
+SET VALID_LOTS = '$(vValidLotFlagField)={1}';			//valid lot
+SET VALID_CONTRACTS = '$(vValidContractFlagField)={1}'; //valid contract
+
+
+//====KPIs====
+SET PARAMS = (=replace('$1', ';', ',')); 
+
+SET _LOT_AMOUNT_ = 'SUM({<$'&PARAMS&'>} $(vLotValue)'&')';
+LET expLotAmount = $(_LOT_AMOUNT_);
+
+SET _PLAN_AMOUNT_ = 'SUM({<$'&PARAMS&'>} $(vPlanValue)'&')';
+LET expPlanAmount = $(_PLAN_AMOUNT_);
+
+SET _CONTRACT_AMOUNT_ = 'SUM({<$'&PARAMS&'>} $(vContractValue)'&')';
+LET expContractAmount = $(_CONTRACT_AMOUNT_);
+
+SET _TRANSACTION_AMOUNT_ = 'SUM({<$'&PARAMS&'>} $(vTransactionValue)'&')';
+LET expTransactionAmount = $(_TRANSACTION_AMOUNT_);
+
+
+//====Format functions
+SET NumConvertRu = "Pick(RangeSum(Floor(LOG10($1)),1), NUM($1, '# ##0'), NUM($1, '# ##0'), NUM($1, '# ##0'), NUM($1/1000, '# ##0,00 $(_T_1_Ru)', ',', ' '), NUM($1/1000, '# ##0,00 $(_T_1_Ru)', ',', ' '), NUM($1/1000, '# ##0,00 $(_T_1_Ru)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_Ru)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_Ru)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_Ru)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_Ru)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_Ru)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_Ru)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_Ru)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_Ru)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_Ru)', ',', ' '))";
+SET NumConvertEn = "Pick(RangeSum(Floor(LOG10($1)),1), NUM($1, '# ##0'), NUM($1, '# ##0'), NUM($1, '# ##0'), NUM($1/1000, '# ##0,00 $(_T_1_En)', ',', ' '), NUM($1/1000, '# ##0,00 $(_T_1_En)', ',', ' '), NUM($1/1000, '# ##0,00 $(_T_1_En)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_En)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_En)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_En)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_En)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_En)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_En)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_En)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_En)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_En)', ',', ' '))";
+SET NumConvertKz = "Pick(RangeSum(Floor(LOG10($1)),1), NUM($1, '# ##0'), NUM($1, '# ##0'), NUM($1, '# ##0'), NUM($1/1000, '# ##0,00 $(_T_1_Kz)', ',', ' '), NUM($1/1000, '# ##0,00 $(_T_1_Kz)', ',', ' '), NUM($1/1000, '# ##0,00 $(_T_1_Kz)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_Kz)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_Kz)', ',', ' '), NUM($1/1000000, '# ##0,00 $(_T_2_Kz)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_Kz)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_Kz)', ',', ' '), NUM($1/1000000000, '# ##0,00 $(_T_3_Kz)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_Kz)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_Kz)', ',', ' '), NUM($1/1000000000000, '# ##0,00 $(_T_4_Kz)', ',', ' '))";
+
+
+
+////5.5 Multilang
+
+
+//====Field names of Multilang dictionaries
+FieldNamesTable:
+NoConcatenate
+LOAD
+    "Index",
+    Reference,
+    Ru,
+    En,
+    Kz
+FROM [$(DIC_QVD_PATH_PLANFACT)//Multilang_FieldNames.qvd]
+(qvd);
+
+//Inner Dictionaries Multilang
+InnerDictionaries:
+NoConcatenate
+LOAD
+    "Index",
+    Reference,
+    Ru,
+    En,
+    Kz,
+    attributeOf
+FROM [$(DIC_QVD_PATH_PLANFACT)//Multilang_Dictionaries.qvd]
+(qvd);
+
+set Verbatim = 1;
+//Multilang interface
+Translations:
+NoConcatenate
+load     "Index",
+    Reference,
+    Ru,
+    En,
+    Kz
+From [$(DIC_QVD_PATH_PLANFACT)Multilang_Labels.qvd] (qvd);
+
+Language:
+CROSSTABLE (Language, Translation) LOAD 
+	 Index, 
+     Ru,
+     En,
+     Kz
+RESIDENT Translations;
+
+LanguageList:
+LOAD Distinct
+	 Language as _Language
+RESIDENT Language
+WHERE Language > 0;
+
+left join(LanguageList)
+LOAD
+    Index as [_Language],
+    Ru as [Index_]
+Resident InnerDictionaries
+where attributeOf like 'LanguageList'
+;
+
+DROP TABLE Translations;
+
+// Multilang interface vars
+LET T = replace('_T_$1_@(=FirstSortedValue(distinct _Language, Index_))', '@', '$');
+
+LET vTranslationsRows = NoOfRows('Language');
+
+FOR i = 0 TO vTranslationsRows - 1 
+	LET _vTranslationId = Peek('Index', i, 'Language');
+	LET _vTranslation = Peek('Translation', i, 'Language');
+	LET _vTrLanguage = Peek('Language', i, 'Language');
+	
+	LET _vTrName = '_T_$(_vTranslationId)_$(_vTrLanguage)';
+	LET $(_vTrName) = '$(_vTranslation)';
+	
+
+	LET _vTranslationId =;
+	LET _vTranslation =;
+	LET _vTrLanguage =;
+	LET _vTrName =;
+NEXT;
+
+DROP Table Language;
+
+// Tooltips multilang
+Translations:
+Load 
+	 "Index",
+     Ru,
+     En,
+     Kz
+From [$(DIC_QVD_PATH)TranslationsHelp.qvd] (qvd);
+
+Language:
+CROSSTABLE (Language, Translation) LOAD 
+	 Index, 
+     Ru,
+     En,
+     Kz
+RESIDENT Translations;
+
+// Tooltips multilang vars
+LET H = replace('_H_$1_@(=FirstSortedValue(_Language, Index_))', '@', '$');
+
+LET vTranslationsRows = NoOfRows('Language');
+
+FOR i = 0 TO vTranslationsRows - 1 
+	LET _vTranslationId = Peek('Index', i, 'Language');
+	LET _vTranslation = Peek('Translation', i, 'Language');
+	LET _vTrLanguage = Peek('Language', i, 'Language');
+	
+	LET _vTrName = '_H_$(_vTranslationId)_$(_vTrLanguage)';
+	LET $(_vTrName) = '$(_vTranslation)';
+	
+	LET _vTranslationId =;
+	LET _vTranslation =;
+	LET _vTrLanguage =;
+	LET _vTrName =;
+NEXT
+
+DROP Tables Language, Translations;
+
+//Rename ENSTRU classification fields
+TempRu:
+Load * inline [
+init_name, join_field
+classification_Class_codeNameRu,ENSTRUClass
+classification_SubClass_codeNameRu,ENSTRUSubclass
+classification_Group_codeNameRu,ENSTRUGroup
+classification_Vedomstvo_codeNameRu,ENSTRUVedomstvo
+classification_code_codeNameRu,ENSTRUCode
+];
+
+left join(TempRu)
+Load Ru as correct_name,
+	 "Index" as join_field
+Resident FieldNamesTable
+Where WildMatch(Index, 'ENSTRU*')
+;
+
+TempKz:
+NoConcatenate
+Load * inline [
+init_name, join_field
+classification_Class_codeNameKz,ENSTRUClass
+classification_SubClass_codeNameKz,ENSTRUSubclass
+classification_Group_codeNameKz,ENSTRUGroup
+classification_Vedomstvo_codeNameKz,ENSTRUVedomstvo
+classification_code_codeNameKz,ENSTRUCode
+];
+
+left join(TempKz)
+Load Kz as correct_name,
+	 "Index" as join_field
+Resident FieldNamesTable
+Where WildMatch(Index, 'ENSTRU*')
+;
+
+Concatenate(TempRu)
+Load *
+Resident TempKz;
+
+drop table TempKz;
+
+Temp:
+Mapping
+Load init_name as init_name_,
+	 correct_name as correct_name_
+Resident TempRu;
+
+drop table TempRu;
+
+Rename fields using Temp;
+
+
+
+
+////6. Interface Tables
+
+
+
+//Lot SubStatus Mapping
+LotSubStatus:
+left Keep(Lots)
+LOAD
+    lot_substatus_name_kz,
+    lot_substatus_name_en,
+    lot_substatus_name_ru,
+    lot_subStatus,
+    lot_subStatus as lot_subStatus_load_reference
+FROM [$(DIC_QVD_PATH_TENDER)Lot_substatus.qvd]
+(qvd);
+
+LotSubStatus_add: //table must containt all possible statuses
+left Keep(Lots)
+LOAD * inline [
+lot_subStatus,	lot_substatus_name_ru,	lot_substatus_name_en,	lot_substatus_name_kz
+unsuccessful,	Закупка не состоялась,	Unsuccessful,			Закупка не состоялась KZ
+cancelled,	Закупка отменена,			Cancelled,				Закупка отменена KZ
+complete,	Закупка состоялась,			Complete,				Закупка состоялась KZ
+active,		Закупка в процессе,			Active,					Закупка в процессе KZ
+]
+where not exists(lot_subStatus_load_reference,	lot_subStatus)
+;
+
+Concatenate(LotSubStatus)
+Load lot_substatus_name_kz,
+    lot_substatus_name_en,
+    lot_substatus_name_ru,
+    lot_subStatus
+Resident LotSubStatus_add;
+
+drop table LotSubStatus_add;
+
+drop field lot_subStatus_load_reference;
+
+//Add script to account for statuses not present in the dictionary
+
+//mapping additional statuses
+Concatenate(LotSubStatus)
+Load * Inline [
+lot_subStatus,	lot_substatus_name_ru,					lot_substatus_name_en,			lot_substatus_name_kz
+350,			Закупка состоялась (ожидает договора),	Complete (awaits the contract),	Закупка состоялась (ожидает договора)
+];
+
+left join(LotSubStatus)
+Load distinct lot_subStatus,
+	 lot_subStatus as lot_subStatus_for_control
+Resident LotSubStatus;
+
+Concatenate(LotSubStatus)
+Load lot_subStatus,
+	 lot_subStatus as lot_substatus_name_ru
+Resident Lots
+where not Exists(lot_subStatus_for_control, lot_subStatus)
+;
+
+drop field lot_subStatus_for_control from LotSubStatus;
+
+CALL translationsNewTable('ProcurementMethodDetails', 'LotPlanLinkTable', 'procurementMethodDetails');
+CALL translationsNewTable('PlanItemStatus', 'Plans', 'item_status');
+CALL translationsNewTable('ContractStatus', 'Contracts_from_contracting', 'contract_status');
+CALL translationsNewTable('ItemTypes', 'Plans', 'item_type');
+
+
+////7. FieldNames Mapping
+
+
+
+//Finalize
+Drop tables FieldNamesTable, InnerDictionaries;
+
+drop fields  	item_plannedMonth, 
+				item_procurementCategory,
+				//plan_value_amount,
+				//plan_value_currency,
+				//plan_status,
+				tender_enquiryPeriod_startDate,
+				tender_tenderPeriod_startDate,
+                plannings_procurementCategory,
+				plannings_procurementMethodDetails,
+				plannings_type
+
+;
+
+Rename fields lot_substatus_name_ru to [Статус лота],
+			  lot_substatus_name_en to [Lot status],
+              lot_substatus_name_kz to [Лоттың статусы]
+;
+
+
+MapTable:
+Mapping
+Load * inline [
+Field_orig,Field_Name
+bid_date,Дата заявки
+bid_relatedLot,_bid_relatedLot
+bid_status,_bid_status
+bid_status_complex,_bid_status_complex
+buyer_nameId,Имя-Код заказчика
+classification_Class_codeNameKz,Класс ЕНСТРУ KZ
+classification_Class_codeNameRu,Класс ЕНСТРУ
+classification_code_codeNameKz,ЕНСТРУ классификатор KZ
+classification_code_codeNameRu,ЕНСТРУ классификатор
+classification_Group_codeNameKz,Группа ЕНСТРУ KZ
+classification_Group_codeNameRu,Группа ЕНСТРУ
+classification_SubClass_codeNameKz,Подкласс ЕНСТРУ KZ
+classification_SubClass_codeNameRu,Подкласс ЕНСТРУ
+classification_Vedomstvo_codeNameKz,Ведомственный классификатор ЕНСТРУ KZ
+classification_Vedomstvo_codeNameRu,Ведомственный классификатор ЕНСТРУ
+contract_dateRegistered,Дата регистрации договора
+contract_dateSigned,Дата подписания договора
+contract_rootId,_contract_rootId
+contract_status,_contract_status
+contract_transaction_id,Код платежа
+contract_transaction_value_amount,Сумма платежа
+contract_validForCalculations,_contract_validForCalculations
+contract_value_amount,Сумма договора
+contract_value_currency,Валюта договора
+contract_value_valueAddedTaxIncluded,НДС договора
+edizm,Единица измерения предмета закупки
+IDBidKey,_IDBidKey
+IDBidOrig,Код заявки
+IDbuyerKey,_IDbuyerKey
+IDContractKey,_IDContractKey
+IDContractOrig,Код договора
+IDItemKey,_IDItemKey
+IDItemOrig,Код пункта плана
+IDLotKey,_IDLotKey
+IDLotOrig,Код лота
+IDLotPlanContract,Код связи ЛотПланКонтракт
+IDPlanKey,_IDPlanKey
+IDPlanningsKey,_IDPlanningsKey
+IDPlanningsOrig,Код пункта плана (из лота)
+IDPlanOrig,Код плана
+IDReleaseOCIDKey,_IDReleaseOCIDKey
+IDReleaseOCIDOrig,Код релиза
+IDtendererKey,_IDtendererKey
+IDtendererOrig,Код участика
+IDTenderKey,_IDTenderKey
+IDTenderOrig,Код тендера
+item_classification_scheme,_item_classification_scheme
+item_date,Дата пункта плана
+item_lotId,Код лота (из пункта плана)
+item_quantity,Количество предмета закупки
+item_rootId,_item_rootId
+item_status,_item_status
+item_status_complete,_item_status_complete
+item_type,_item_type
+item_unit_value_amount,Стоимость единицы предмета закупки
+item_unit_value_currency,Валюта пункта плана
+item_value,Стоимость пункта плана
+lot_amount,Стоимость лота
+lot_is_contracted,_lot_is_contracted
+lot_status,_lot_status
+lot_subStatus,_lot_subStatus
+lot_validForCalculations,_lot_validForCalculations
+plan_buyer_name_kz,_plan_buyer_name_kz
+plan_date,Дата плана
+plan_validForCalculations,_plan_validForCalculations
+procurementMethodDetails,_procurementMethodDetails
+year, Год
+] (delimiter is ',');
+
+Rename Fields using MapTable;
+
+SEARCH Include 
+"Ведомственный классификатор ЕНСТРУ",
+"Ведомственный классификатор ЕНСТРУ KZ",
+"Группа ЕНСТРУ",
+"Группа ЕНСТРУ KZ",
+"Дата заявки",
+"Дата плана",
+"Дата подписания договора",
+"Дата пункта плана",
+"Дата регистрации договора",
+"Единица измерения предмета закупки",
+"ЕНСТРУ классификатор",
+"ЕНСТРУ классификатор KZ",
+"Имя-Код заказчика",
+"Класс ЕНСТРУ",
+"Класс ЕНСТРУ KZ",
+"Код договора",
+"Код заявки",
+"Код лота",
+"Код плана",
+"Код платежа",
+"Код пункта плана",
+"Код релиза",
+"Код тендера",
+"Код участика",
+"Количество предмета закупки",
+"Метод закупки",
+"Метод закупки KZ",
+"Подкласс ЕНСТРУ",
+"Подкласс ЕНСТРУ KZ",
+"Статус договора",
+"Статус договора KZ",
+"Статус лота",
+"Статус лота KZ",
+"Статус пункта плана",
+"Статус пункта плана KZ",
+"Стоимость единицы предмета закупки",
+"Стоимость лота",
+"Стоимость пункта плана",
+"Сумма договора",
+"Сумма платежа",
+"Тип пункта плана",
+"Тип пункта плана KZ",
+"Contract Status",
+"Lot status",
+"Plan Item Status",
+"Plan Item Type",
+"Procurement Method Type"
+;
+
+
+
+////exit script
+
+
+exit script;
